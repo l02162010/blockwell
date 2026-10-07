@@ -2,6 +2,8 @@
 
 A block-based rich-text editor whose documents are structured JSON, never HTML.
 
+**[Website and live demo](https://l02162010.github.io/blockwell/)** · [Playground](https://l02162010.github.io/blockwell/playground/)
+
 Blockwell is built for one goal: rich text without the XSS problems of storing and rendering HTML. Every document is checked against a whitelist schema, colors are palette tokens instead of CSS, links are scheme-checked, and renderers build output so that user content can only ever become text.
 
 > **Status: early development.** The spec, the TypeScript validator, the editor core and the Vue 3 adapter (UI/UX spec v0.3) work; renderers and the other-language validators are still in progress.
@@ -45,6 +47,7 @@ Marks: bold, italic, underline, strike, inline code, link, text color, highlight
 | [`packages/schema`](packages/schema/) | `@blockwell/schema` — TypeScript reference validator and flattener | Working |
 | [`packages/core`](packages/core/) | `@blockwell/core` — model, transactions, history, `contenteditable` view, paste conversion (HTML, Google Docs, Word, Markdown), search, diff | Working |
 | [`packages/vue`](packages/vue/) | `@blockwell/vue` — `<BlockwellEditor>` and its toolbars, menus, dialogs, status and collaboration UI | Working |
+| [`apps/site`](apps/site/) | Website with a live editor, deployed to GitHub Pages | Working |
 | [`apps/playground`](apps/playground/) | Demo of every v0.3 design screen, plus Playwright tests | Working |
 | [`go/`](go/) | Go module | Skeleton |
 | [`dotnet/`](dotnet/) | `Blockwell` NuGet package | Skeleton |
@@ -65,6 +68,7 @@ pnpm install
 pnpm test        # TypeScript conformance and editor-core tests
 pnpm --filter ./apps/playground dev   # playground at http://localhost:5173
 pnpm --filter ./apps/playground e2e   # Playwright browser tests
+./scripts/build-pages.sh              # website + playground into site-dist/
 cd go && go test ./...
 cd rust && cargo test
 cd dotnet && dotnet test tests/Blockwell.Tests/Blockwell.Tests.csproj

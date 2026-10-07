@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Blockwell — 不存 HTML 的富文本編輯器</title>
+    <meta name="description" content="Blockwell 是以結構化 JSON 為唯一真相的區塊式富文本編輯器：schema 白名單即安全邊界，從根本避開 XSS。" />
+    <meta property="og:title" content="Blockwell" />
+    <meta property="og:description" content="富文本，不存 HTML。以 JSON 為唯一真相、schema 即安全邊界的區塊式編輯器。" />
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&family=Noto+Sans+TC:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..24,300..500,0..1,0&display=block" rel="stylesheet" />
+    <script>
+      try { const t = localStorage.getItem('bw-theme') || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'); document.documentElement.setAttribute('data-theme', t); } catch {}
+    </script>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

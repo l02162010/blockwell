@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["vite/client"],
+    "exactOptionalPropertyTypes": false,
+    "paths": {
+      "@blockwell/schema": ["../../packages/schema/src/index.ts"],
+      "@blockwell/core": ["../../packages/core/src/index.ts"],
+      "@blockwell/vue": ["../../packages/vue/src/index.ts"]
+    }
+  },
+  "include": ["src", "../../packages/vue/src/env.d.ts"]
+}

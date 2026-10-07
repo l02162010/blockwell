@@ -34,7 +34,7 @@ const uploadImage = (file: File, onProgress: (f: number) => void): Promise<Uploa
 <template>
   <main class="page">
     <header class="intro">
-      <div class="eyebrow">Blockwell · UI/UX Spec v0.3 · Playground</div>
+      <div class="eyebrow"><a href="../" class="home-link">Blockwell</a> · UI/UX Spec v0.3 · Playground</div>
       <h1>富文本編輯器 <span>Rich Text Editor</span></h1>
       <p>對應引擎指南 §3–§10 的介面設計。精簡頂部工具列、選取浮動列與斜線指令並存；所有樣式只來自 schema 白名單，顏色只有色盤 token。</p>
       <div class="controls">

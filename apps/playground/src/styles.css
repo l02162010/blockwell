@@ -38,6 +38,9 @@ code {
   color: var(--bw-muted);
   text-transform: uppercase;
 }
+.home-link {
+  color: inherit;
+}
 .intro h1 {
   margin: 0;
   font-size: clamp(28px, 4vw, 40px);

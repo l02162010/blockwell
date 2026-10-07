@@ -16,3 +16,4 @@ obj/
 # Playwright
 test-results/
 playwright-report/
+site-dist/

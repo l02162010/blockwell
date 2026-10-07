@@ -5,8 +5,7 @@ import { blockwellPalette } from '../../packages/vue/vite.palette.js';
 
 const src = (p: string) => fileURLToPath(new URL(p, import.meta.url));
 
-// Works against the packages' sources, so edits show up without a build.
-// BASE is set by the Pages workflow (e.g. /blockwell/playground/).
+// BASE is set by the Pages workflow (e.g. /blockwell/).
 export default defineConfig({
   base: process.env.BASE ?? '/',
   plugins: [vue(), blockwellPalette()],
