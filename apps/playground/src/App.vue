@@ -22,11 +22,25 @@ const stored = (() => {
   }
 })();
 const theme = ref<'light' | 'dark'>(stored === 'dark' || (stored !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light');
+// While you have not picked one, a change of the system setting is followed live.
+const media = matchMedia('(prefers-color-scheme: dark)');
+media.addEventListener('change', (e) => {
+  let picked = null;
+  try {
+    picked = localStorage.getItem('bw-theme');
+  } catch {
+    /* no storage */
+  }
+  if (!picked) theme.value = e.matches ? 'dark' : 'light';
+});
+let followingSystem = !stored;
 watch(
   theme,
   (t, old) => {
     document.documentElement.setAttribute('data-theme', t);
     if (old === undefined) return;
+    if (followingSystem && t === (media.matches ? 'dark' : 'light')) return;
+    followingSystem = false;
     try {
       localStorage.setItem('bw-theme', t);
     } catch {

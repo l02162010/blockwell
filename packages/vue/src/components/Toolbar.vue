@@ -56,6 +56,12 @@ const roving = () => {
 onMounted(roving);
 watch([() => ctx.version.value, mobileMode], () => nextTick(roving));
 const onKey = (e: KeyboardEvent) => {
+  // Esc in the toolbar goes back to the text, with the selection it had.
+  if (e.key === 'Escape' && !ctx.ui.popover && bar.value?.contains(document.activeElement)) {
+    e.preventDefault();
+    ed().focus();
+    return;
+  }
   if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return;
   const list = buttons();
   const i = list.indexOf(document.activeElement as HTMLButtonElement);

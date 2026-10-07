@@ -226,6 +226,7 @@ const keyboardOffset = ref(0);
 let mq: MediaQueryList | null = null;
 const onMq = () => (narrow.value = props.layout === 'mobile' || !!mq?.matches);
 watch(narrow, (v) => (ctx.narrow.value = v), { immediate: true });
+watch(focused, (v) => (ctx.focused.value = v));
 const onViewport = () => {
   const vv = window.visualViewport;
   keyboardOffset.value = vv ? Math.max(0, window.innerHeight - vv.height - vv.offsetTop) : 0;
@@ -262,7 +263,8 @@ const stats = computed(() => {
 const commentOpen = computed(() => focused.value || count.value > 0 || ctx.ui.popover !== null);
 const isPage = computed(() => props.variant === 'page');
 const showPageToolbar = computed(() => isPage.value && props.toolbar && props.editable && !narrow.value && !props.diffBase);
-const showMobileToolbar = computed(() => isPage.value && props.editable && narrow.value && (focused.value || props.layout === 'mobile'));
+// Like a phone's keyboard bar: only while editing, so it never looks active when it is not.
+const showMobileToolbar = computed(() => isPage.value && props.editable && narrow.value && focused.value);
 const fmt = (n: number) => n.toLocaleString('en-US');
 
 /** A click in the empty space below the document continues it, like a word processor. */
@@ -337,7 +339,7 @@ defineExpose({ editor, submit });
     <Toolbar v-if="variant === 'comment' && editable && commentOpen" variant="comment" @mention="emit('mention')">
       <template #end>
         <span class="bw-kbd-hint">{{ kbd('⌘↵') }}</span>
-        <button type="button" class="bw-btn bw-btn-dark" @mousedown.prevent @click="submit">{{ messages.send }}</button>
+        <button type="button" class="bw-btn bw-btn-dark" :disabled="isEmpty" @mousedown.prevent @click="submit">{{ messages.send }}</button>
       </template>
     </Toolbar>
 

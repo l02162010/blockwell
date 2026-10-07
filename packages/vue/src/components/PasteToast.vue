@@ -17,15 +17,26 @@ const hide = () => {
   report.value = null;
   clearTimeout(timer);
 };
+let offKey: (() => void) | null = null;
 onMounted(() => {
-  off = ctx.editor.value.on('paste', ({ report: r }) => {
+  const ed = ctx.editor.value;
+  off = ed.on('paste', ({ report: r }) => {
     report.value = r;
     clearTimeout(timer);
     timer = window.setTimeout(hide, 9000);
+    // Show what was pasted.
+    requestAnimationFrame(() => ed.scrollCaretIntoView());
+  });
+  // Like the feedback note: carrying on typing (or Escape) dismisses it.
+  offKey = ed.addKeyHandler((e) => {
+    if (!report.value || ['Shift', 'Control', 'Meta', 'Alt', 'CapsLock'].includes(e.key) || e.metaKey || e.ctrlKey) return false;
+    hide();
+    return e.key === 'Escape';
   });
 });
 onBeforeUnmount(() => {
   off?.();
+  offKey?.();
   clearTimeout(timer);
 });
 

@@ -1006,3 +1006,14 @@ section {
     gap: 4px;
   }
 }
+.paste-field .bw-scroll {
+  max-height: 340px;
+  overflow: auto;
+}
+/* A phone keyboard goes away while a sheet is up. */
+.phone:has(.bw-sheet) .keyboard {
+  display: none;
+}
+.doc-view.bw-content > * {
+  margin-block: 0;
+}

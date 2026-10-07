@@ -9,6 +9,18 @@ const empty: Doc = { version: 1, blocks: [{ id: 'e1', type: 'paragraph', text: '
 const title = ref('');
 const emptyEditor = shallowRef<Editor | null>(null);
 /** Enter or ↓ in the title continues in the body, like a document title should. */
+const titleEl = ref<HTMLInputElement | null>(null);
+/** ↑ at the very start of the body goes back up to the title. */
+const onEmptyReady = (e: Editor) => {
+  emptyEditor.value = e;
+  e.addKeyHandler((k) => {
+    const sel = e.selection;
+    const first = e.getJSON().blocks[0];
+    if (k.key !== 'ArrowUp' || sel?.type !== 'text' || !first || sel.focus.block !== first.id || sel.focus.offset !== 0) return false;
+    titleEl.value?.focus();
+    return true;
+  });
+};
 const toBody = (e: KeyboardEvent) => {
   e.preventDefault();
   const ed = emptyEditor.value;
@@ -44,8 +56,8 @@ const placeholders: Doc = {
         <div class="card-title">空白文件 <span>Empty state</span></div>
         <div class="card-desc">第一次開啟時介紹斜線指令與快捷輸入，開始輸入後自動收起。</div>
         <div class="inner empty-doc">
-          <input v-model="title" class="title-input" placeholder="未命名文件 Untitled" aria-label="標題 Title" @keydown.enter="toBody" @keydown.down="toBody" />
-          <BlockwellEditor :model-value="empty" class="inline-page" :toolbar="false" @ready="emptyEditor = $event" />
+          <input ref="titleEl" v-model="title" class="title-input" placeholder="未命名文件 Untitled" aria-label="標題 Title" @keydown.enter="toBody" @keydown.down="toBody" />
+          <BlockwellEditor :model-value="empty" class="inline-page" :toolbar="false" @ready="onEmptyReady" />
         </div>
       </div>
       <div class="card">

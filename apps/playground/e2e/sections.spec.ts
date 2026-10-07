@@ -140,9 +140,9 @@ test('06: search reaches a block far down a large document', async ({ page }) =>
   await s.scrollIntoViewIfNeeded();
   await s.getByRole('button', { name: /載入 3,412/ }).click();
   await s.getByRole('button', { name: /搜尋/ }).click();
-  await s.locator('.bw-searchbar input').fill('3401. ');
+  await s.locator('.bw-searchbar input').fill('3300. ');
   await expect(s.locator('.bw-search-count')).toHaveText(/1 \/ \d+/);
-  await expect(s.locator('.large-doc .bw-editor [data-bw-text]', { hasText: '3401. ' }).first()).toBeInViewport();
+  await expect(s.locator('.large-doc .bw-editor [data-bw-text]', { hasText: '3300. ' }).first()).toBeInViewport();
 });
 
 test('07: the live editor reports what a screen reader would hear', async ({ page }) => {

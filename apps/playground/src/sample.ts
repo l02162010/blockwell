@@ -184,9 +184,11 @@ export function largeDoc(): Doc {
     '組字中點擊別處，候選字不應遺失。',
   ];
   const blocks: Block[] = [];
+  // Items are numbered on their own (no gaps where a heading sits).
+  let n = 0;
   for (let i = 0; i < 3412; i++) {
     if (i % 40 === 0) blocks.push(rich('heading', [`第 ${i / 40 + 1} 輪測試紀錄`], { level: 2 }));
-    else blocks.push(p(`${i}. ${lines[i % lines.length]}`));
+    else blocks.push(p(`${++n}. ${lines[i % lines.length]}`));
   }
   return { version: 1, blocks };
 }

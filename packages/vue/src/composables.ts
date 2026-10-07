@@ -80,6 +80,8 @@ export interface BlockwellContext {
   messages: Messages;
   /** Narrow layout: popovers open as bottom sheets. */
   narrow: Ref<boolean>;
+  /** The editor has focus (selection-bound UI such as the image bar shows only then). */
+  focused: Ref<boolean>;
   open(kind: Exclude<PopoverKind, null>, anchor: (() => DOMRect | null) | null, opts?: { block?: string | null; source?: UiState['source'] }): void;
   close(): void;
   toggle(kind: Exclude<PopoverKind, null>, anchor: (() => DOMRect | null) | null, opts?: { block?: string | null; source?: UiState['source'] }): void;
@@ -99,6 +101,7 @@ export function provideBlockwell(editor: ShallowRef<Editor>, messages: Messages 
     ui,
     messages,
     narrow: ref(false),
+    focused: ref(false),
     open(kind, anchor, opts = {}) {
       ui.popover = kind;
       ui.anchor = anchor ? markRaw(anchor) : null;

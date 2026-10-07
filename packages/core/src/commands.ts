@@ -720,8 +720,10 @@ export function insertBlock(tr: Tr, block: Block, o: CommandOptions): boolean {
   }
   if (isAtom(block)) {
     const after = childrenOf(tr.doc, parent)[index + 1];
-    // Continue in a fresh paragraph, not at the start of whatever block happens to follow.
-    if (!after || after.type !== 'paragraph' || textLength(after) > 0) tr.insertBlock(parent, index + 1, emptyParagraph());
+    // A divider continues in a fresh paragraph, not at the start of whatever block follows; an
+    // image (which stays selected) only needs one when nothing editable follows it.
+    const fresh = block.type === 'image' ? !after || !isText(after) : !after || after.type !== 'paragraph' || textLength(after) > 0;
+    if (fresh) tr.insertBlock(parent, index + 1, emptyParagraph());
     tr.setSelection(block.type === 'image' ? { type: 'node', block: block.id } : caret(childrenOf(tr.doc, parent)[index + 1]!.id, 0));
   } else {
     const first = textBlocks({ version: 1, blocks: [block] })[0];

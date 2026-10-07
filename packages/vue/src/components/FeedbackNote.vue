@@ -78,6 +78,7 @@ const run = () => {
   if (f.code === 'length' && f.block && f.rest) {
     ctx.editor.value.insertOverflow(f.block, f.rest);
     fb.value = null;
+    requestAnimationFrame(() => ctx.editor.value.scrollCaretIntoView());
   } else if (f.code === 'image-src') {
     ctx.pickImage();
     fb.value = null;

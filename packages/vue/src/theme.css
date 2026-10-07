@@ -2921,3 +2921,25 @@ button.bw-code-lang:hover {
     0 0 0 6px oklch(0.29 0.04 27),
     0 0 0 7.5px oklch(0.66 0.16 27);
 }
+
+/* A selected image only looks selected while the editor has focus. */
+.bw-editor:not(:focus) .bw-image.bw-selected .bw-image-frame {
+  outline: none;
+}
+.bw-editor:not(:focus) .bw-image .bw-resize,
+.bw-editor:not(:focus) .bw-image .bw-image-size {
+  display: none;
+}
+.bw-image-missing {
+  max-width: 100%;
+}
+/* Touch: no keyboard-shortcut hints, and comment buttons big enough to tap. */
+@media (pointer: coarse) {
+  .bw-kbd-hint {
+    display: none;
+  }
+  .bw-toolbar-comment .bw-tool {
+    min-width: 40px;
+    height: 40px;
+  }
+}

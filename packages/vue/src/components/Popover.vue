@@ -92,7 +92,11 @@ const onKey = (e: KeyboardEvent) => {
     ctx.close();
   }
 };
-onMounted(() => window.addEventListener('keydown', onKey, true));
+onMounted(() => {
+  window.addEventListener('keydown', onKey, true);
+  // A sheet opens scrolled to what is chosen now (the current block type, colour…).
+  if (ctx.narrow.value) requestAnimationFrame(() => el.value?.querySelector('.bw-current, [aria-checked="true"]')?.scrollIntoView({ block: 'nearest' }));
+});
 onBeforeUnmount(() => window.removeEventListener('keydown', onKey, true));
 </script>
 

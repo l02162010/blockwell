@@ -88,6 +88,7 @@ export interface Messages {
   searchPlaceholder: string;
   swipe: string;
   tableBar: { addRow: string; addCol: string; delete: string; more: string };
+  tableMenus: { row: string; column: string };
   emptyHint: string;
   onboarding: { items: [string, string, string][]; dismiss: string };
   placeholders: Partial<Record<BlockKind, string>>;
@@ -107,6 +108,10 @@ export interface Messages {
   tokenNames: Record<string, string>;
   announce: (what: string, on: boolean) => string;
 }
+
+const TOKEN_ZH: Record<string, string> = {
+  default: '預設', gray: '灰色', brown: '棕色', red: '紅色', orange: '橙色', yellow: '黃色', green: '綠色', teal: '藍綠色', cyan: '青色', blue: '藍色', purple: '紫色', pink: '粉紅色',
+};
 
 export const defaultMessages: Messages = {
   blockKinds: {
@@ -264,6 +269,7 @@ export const defaultMessages: Messages = {
   searchPlaceholder: '搜尋文件 · Find in document',
   swipe: '左右滑動',
   tableBar: { addRow: '加列', addCol: '加欄', delete: '刪除列', more: '更多' },
+  tableMenus: { row: '列選單 Row menu', column: '欄選單 Column menu' },
   emptyHint: '開始寫作，或輸入 / 插入區塊',
   onboarding: {
     items: [['/', '插入任何區塊', 'Insert block'], ['# 空格', '標題', 'Heading'], ['- 空格', '項目清單', 'List'], ['[] 空格', '待辦', 'To-do']],
@@ -301,7 +307,9 @@ export const defaultMessages: Messages = {
     if (kinds[what]) return `已轉為${kinds[what]}`;
     const [type, token] = what.split(':');
     const name = names[type!] ?? type;
-    return on ? `已套用${token ? `${token} ` : ''}${name}` : `已移除${name}`;
+    // "已套用紅色文字色", with the colour's Chinese name rather than its token.
+    const colour = token ? (TOKEN_ZH[token] ?? token) : '';
+    return on ? `已套用${colour}${name}` : `已移除${name}`;
   },
 };
 

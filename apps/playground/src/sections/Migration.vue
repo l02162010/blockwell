@@ -71,9 +71,12 @@ const finish = (s: Status) => {
   selected.value = next?.id ?? null;
   nextTick(() => (next ? list.value?.querySelector<HTMLElement>(`[data-id="${next.id}"]`) : list.value?.querySelector<HTMLElement>('.mig-empty button'))?.focus());
 };
+const editorHost = ref<HTMLElement | null>(null);
 const edit = () => {
   draft.value = current.value ? structuredClone(current.value.doc) : null;
   editing.value = true;
+  // Straight into the editor.
+  nextTick(() => editorHost.value?.querySelector<HTMLElement>('.bw-editor')?.focus());
 };
 const saveEdit = () => {
   const id = selected.value;
@@ -85,12 +88,14 @@ const rerun = () => {
   results.value = convert();
   status.value = {};
   selected.value = results.value[0]?.id ?? null;
+  nextTick(() => list.value?.querySelector<HTMLElement>('.mig-item')?.focus());
 };
 const onListKey = (e: KeyboardEvent) => {
-  if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+  if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) return;
   e.preventDefault();
   const i = queue.value.findIndex((r) => r.id === selected.value);
-  const next = queue.value[Math.max(0, Math.min(queue.value.length - 1, i + (e.key === 'ArrowDown' ? 1 : -1)))];
+  const to = e.key === 'Home' ? 0 : e.key === 'End' ? queue.value.length - 1 : i + (e.key === 'ArrowDown' ? 1 : -1);
+  const next = queue.value[Math.max(0, Math.min(queue.value.length - 1, to))];
   if (!next) return;
   selected.value = next.id;
   nextTick(() => list.value?.querySelector<HTMLElement>(`[data-id="${next.id}"]`)?.focus());
@@ -104,10 +109,10 @@ const onListKey = (e: KeyboardEvent) => {
       <div class="mig-head">
         <span class="card-title">遷移佇列 <span>Migration queue</span></span>
         <span class="pill pill-ok">{{ counts.converted.toLocaleString('en-US') }} 已轉換</span>
-        <span class="pill pill-bad">{{ queue.length }} 待處理</span>
+        <span v-if="queue.length" class="pill pill-bad">{{ queue.length }} 待處理</span>
         <span v-if="counts.skipped" class="pill pill-skip">{{ counts.skipped }} 已略過</span>
         <span class="spacer" />
-        <button type="button" class="btn" @click="rerun">重新執行</button>
+        <button v-if="queue.length" type="button" class="btn" @click="rerun">重新執行</button>
       </div>
       <div class="mig-body">
         <div ref="list" class="mig-list" role="listbox" aria-label="遷移佇列" @keydown="onListKey">
@@ -141,7 +146,7 @@ const onListKey = (e: KeyboardEvent) => {
             </div>
             <div>
               <div class="card-label">{{ editing ? '手動編輯 · Edit' : '轉換結果 · Result' }}</div>
-              <BlockwellEditor v-if="editing && draft" v-model="draft" variant="field" class="mig-edit" :debounce="0" />
+              <div v-if="editing && draft" ref="editorHost"><BlockwellEditor v-model="draft" variant="field" class="mig-edit" :debounce="0" /></div>
               <div v-else ref="preview" class="mig-result bw-content" />
             </div>
           </div>

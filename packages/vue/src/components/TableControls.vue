@@ -67,16 +67,18 @@ const run = (fn: (id: string) => void) => {
 <template>
   <template v-if="table && geometry">
     <div
-      v-if="colOpen"
+      v-if="colOpen && !ctx.narrow.value"
       class="bw-col-highlight"
       :style="{ top: `${geometry.col.top}px`, left: `${geometry.col.left}px`, width: `${geometry.col.width}px`, height: `${geometry.col.height}px` }"
     />
+    <!-- Phones use the bar above the keyboard instead of these handles. -->
     <button
+      v-if="!ctx.narrow.value"
       type="button"
       class="bw-col-handle"
       :class="{ 'bw-open': colOpen }"
       :style="{ top: `${geometry.col.top - 16}px`, left: `${geometry.col.left + geometry.col.width / 2 - 14}px` }"
-      :aria-label="m.tableCol.move.join(' ')"
+      :aria-label="m.tableMenus.column"
       aria-haspopup="menu"
       :aria-expanded="colOpen"
       @mousedown="keepFocus"
@@ -85,17 +87,18 @@ const run = (fn: (id: string) => void) => {
       <BwIcon name="more_horiz" :size="14" />
     </button>
     <button
+      v-if="!ctx.narrow.value"
       type="button"
       class="bw-row-handle"
       :class="{ 'bw-open': rowOpen }"
       :style="{ top: `${geometry.row.top + geometry.row.height / 2 - 12}px`, left: `${geometry.row.left - 18}px` }"
-      :aria-label="m.tableRow.above.join(' ')"
+      :aria-label="m.tableMenus.row"
       aria-haspopup="menu"
       :aria-expanded="rowOpen"
       @mousedown="keepFocus"
       @click="ctx.toggle('tableRow', anchorOf($event))"
     >
-      <BwIcon name="drag_indicator" :size="12" />
+      <BwIcon name="more_vert" :size="12" />
     </button>
 
     <Popover v-if="colOpen" role="menu">
