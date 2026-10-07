@@ -562,7 +562,11 @@ export class Editor {
       this.emit('feedback', { level: 'reject', code: 'image-src', block: this.focusBlockId() ?? undefined });
       return false;
     }
-    return this.run((tr) => C.insertBlock(tr, C.newImage(attrs), this.commandOptions), { seal: true });
+    const ok = this.run((tr) => C.insertBlock(tr, C.newImage(attrs), this.commandOptions), { seal: true });
+    // Show the new image (it may land below the fold or under a phone's toolbar).
+    const sel = this.state.selection;
+    if (ok && sel?.type === 'node') requestAnimationFrame(() => this.blockElement(sel.block)?.scrollIntoView({ block: 'nearest' }));
+    return ok;
   }
 
   insertMention(userId: string): boolean {

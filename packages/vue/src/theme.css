@@ -224,6 +224,11 @@
   gap: 2px;
 }
 .bw-toolbar-page {
+  /* Stays at the top while the page scrolls past a tall editor. */
+  position: sticky;
+  top: 0;
+  z-index: 6;
+  background: var(--bw-surface);
   padding: 6px 12px;
   border-bottom: 1px solid var(--bw-line-soft);
   /* Wraps instead of hiding buttons behind an invisible horizontal scroll. */
@@ -2300,6 +2305,7 @@ button.bw-code-lang:hover {
 }
 .bw-search-input {
   flex: 1;
+  max-width: 420px;
   display: flex;
   align-items: center;
   gap: 6px;
