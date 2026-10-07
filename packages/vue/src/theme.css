@@ -243,6 +243,19 @@
     display: none;
   }
 }
+/* Then the block-type button drops its English label, so a mid-size toolbar stays on one row. */
+@container (max-width: 700px) {
+  .bw-toolbar-page .bw-tool.bw-tool-kind {
+    width: 96px;
+  }
+  .bw-toolbar-page .bw-sep {
+    margin-inline: 2px;
+  }
+  .bw-toolbar-page .bw-tool.bw-tool-insert .bw-en,
+  .bw-toolbar-page .bw-tool.bw-tool-kind .bw-en {
+    display: none;
+  }
+}
 .bw-tool {
   border: 0;
   background: transparent;

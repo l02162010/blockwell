@@ -14,6 +14,7 @@ async function clickEnd(page: Page, start: string) {
   const el = ed(page).locator('[data-bw-text]', { hasText: start }).first();
   await el.scrollIntoViewIfNeeded();
   await el.click();
+  await expect(ed(page)).toBeFocused();
   await page.keyboard.press('End');
 }
 

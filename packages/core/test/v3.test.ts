@@ -126,3 +126,21 @@ describe('turning quoted text into something else', () => {
     expect(tr.doc.blocks.map((b) => b.type)).toEqual(['quote', 'code']);
   });
 });
+
+describe('convertHtml details', () => {
+  it('drops script, svg and meta with their content and says so', () => {
+    const { doc, report } = convertHtml('<p>a<meta http-equiv="refresh" content="0"><script>x()</script><svg><a>s</a></svg>b</p>');
+    expect(doc.blocks.map((b) => b.text)).toEqual(['ab']);
+    expect(report.removedElements.sort()).toEqual(['meta', 'script', 'svg']);
+    expect(report.droppedAttrs).toEqual([]);
+    expect(report.unknownElements).toBe(0);
+  });
+  it('turns <mark> into the yellow highlight', () => {
+    const { doc } = convertHtml('<p>a <mark>b</mark></p>');
+    expect(doc.blocks[0]!.marks).toEqual([{ type: 'highlight', from: 2, to: 3, attrs: { value: 'yellow' } }]);
+  });
+  it('keeps a code block language from its class', () => {
+    const { doc } = convertHtml('<pre><code class="language-js">let a = 1;</code></pre>');
+    expect(doc.blocks[0]).toMatchObject({ type: 'code', attrs: { language: 'javascript' }, text: 'let a = 1;' });
+  });
+});

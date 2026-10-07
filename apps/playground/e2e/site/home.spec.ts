@@ -103,3 +103,35 @@ test('mobile: editor first, JSON behind a tab', async ({ page }) => {
   await expect(json(page)).toBeVisible();
   await expect(editor(page)).toBeHidden();
 });
+
+test('「直接試試看」 puts the caret in the demo', async ({ page }) => {
+  await page.getByRole('link', { name: '直接試試看' }).click();
+  await expect(editor(page)).toBeFocused();
+  await page.keyboard.type('嗨');
+  await expect(json(page)).toContainText('"text": "嗨"');
+});
+
+test('security demo lists removed elements once and keeps ids stable', async ({ page }) => {
+  const out = page.locator('.sec-out');
+  await expect(out.locator('.findings')).toContainText('連同內容移除：<script>、<iframe>');
+  await expect(out.locator('.findings li')).toHaveCount(4);
+  await expect(out).toContainText('"id": "b1"');
+  await page.locator('.sec-in textarea').fill('<pre><code class="language-js">let a</code></pre><p><mark>重點</mark></p>');
+  await expect(out).toContainText('"language": "javascript"');
+  await expect(out).toContainText('"type": "highlight"');
+});
+
+test('phone: the menu button opens the section links', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole('button', { name: /選單/ }).click();
+  await page.locator('.nav-sheet').getByRole('link', { name: '安全模型' }).click();
+  await expect(page.locator('.nav-sheet')).toHaveCount(0);
+  await expect(page.locator('#security')).toBeInViewport();
+});
+
+test('the demo toolbar stays in view while the document scrolls', async ({ page }) => {
+  await editor(page).locator('h2').click();
+  await page.keyboard.press('Control+End');
+  for (let i = 0; i < 30; i++) await page.keyboard.press('Enter');
+  await expect(page.locator('.demo-editor .bw-toolbar-page')).toBeInViewport();
+});

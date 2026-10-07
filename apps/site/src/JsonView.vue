@@ -5,13 +5,27 @@ import { computed } from 'vue';
  * Pretty-prints a document with one block per line and colors the tokens. Built from text
  * nodes only: the input may come from the HTML demo.
  */
-const props = defineProps<{ value: unknown; compact?: boolean }>();
+const props = defineProps<{ value: unknown; compact?: boolean; stableIds?: boolean }>();
+
+/** Fresh random ids on every conversion would make the output jump; show b1, b2… instead. */
+const shown = computed(() => {
+  if (!props.stableIds) return props.value;
+  let n = 0;
+  const walk = (x: unknown): unknown => {
+    if (Array.isArray(x)) return x.map(walk);
+    if (!x || typeof x !== 'object') return x;
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(x)) out[k] = k === 'id' && typeof v === 'string' ? `b${++n}` : walk(v);
+    return out;
+  };
+  return walk(props.value);
+});
 
 type Tok = { t: string; c: string };
 const RE = /("(?:[^"\\]|\\.)*")(\s*:)?|(-?\d+(?:\.\d+)?)|(true|false|null)|([{}[\],:])|(\s+)/g;
 
 const lines = computed(() => {
-  const v = props.value as { blocks?: unknown[] } & Record<string, unknown>;
+  const v = shown.value as { blocks?: unknown[] } & Record<string, unknown>;
   const rows: string[] = [];
   if (Array.isArray(v?.blocks)) {
     const head = Object.entries(v).filter(([k]) => k !== 'blocks').map(([k, x]) => `"${k}": ${JSON.stringify(x)}`);

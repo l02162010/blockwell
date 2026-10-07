@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { convertHtml, type Doc } from '@blockwell/core';
-import { BlockwellEditor } from '@blockwell/vue';
+import { BlockwellEditor, kbd } from '@blockwell/vue';
 import { computed, ref, shallowRef, watch } from 'vue';
 import palette from '../../../spec/palette.json';
 import JsonView from './JsonView.vue';
@@ -30,13 +30,26 @@ const converted = computed(() => convertHtml(html.value));
 const findings = computed(() => {
   const r = converted.value.report;
   const out: string[] = [];
-  if (r.droppedAttrs.length) out.push(`移除屬性：${r.droppedAttrs.join('、')}`);
+  const colors = r.issues.find((i) => i.code === 'color-dropped');
+  if (r.removedElements.length) out.push(`連同內容移除：${r.removedElements.map((t) => `<${t}>`).join('、')}`);
+  // A dropped colour is reported once, as a colour, not again as a "color" attribute.
+  const attrs = r.droppedAttrs.filter((a) => !(colors && a === 'color'));
+  if (attrs.length) out.push(`移除屬性：${attrs.join('、')}`);
   if (r.unsafeUrls) out.push(`擋下 ${r.unsafeUrls} 個不安全的網址`);
-  if (r.unknownElements) out.push(`${r.unknownElements} 個未知標籤只保留文字`);
-  if (r.skipped) out.push(`略過 ${r.skipped} 個嵌入內容`);
-  for (const i of r.issues) if (i.code === 'color-dropped') out.push(`${i.count} 處非色盤顏色被捨棄`);
+  if (r.unknownElements) out.push(`${r.unknownElements} 個不認得的標籤：去掉標籤，保留文字`);
+  if (colors) out.push(`${colors.count} 處不在色盤的顏色被捨棄`);
   return out;
 });
+
+/** 直接試試看: scroll to the demo and put the caret at the end of the sample. */
+const editorRef = shallowRef<{ editor: { focusEnd(): void } } | null>(null);
+const tryIt = (e: MouseEvent) => {
+  e.preventDefault();
+  document.getElementById('demo')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  tab.value = 'editor';
+  setTimeout(() => editorRef.value?.editor.focusEnd(), 350);
+};
+const menuOpen = ref(false);
 
 const tokens = Object.keys(palette.tokens);
 
@@ -76,7 +89,18 @@ const features = [
         >
           <span class="material-symbols-rounded">{{ theme === 'dark' ? 'light_mode' : 'dark_mode' }}</span>
         </button>
-        <a class="btn btn-ghost" :href="REPO" target="_blank" rel="noopener">GitHub</a>
+        <a class="btn btn-ghost nav-github" :href="REPO" target="_blank" rel="noopener">GitHub</a>
+        <button type="button" class="icon-btn nav-menu-btn" aria-label="選單 Menu" :aria-expanded="menuOpen" @click="menuOpen = !menuOpen">
+          <span class="material-symbols-rounded">{{ menuOpen ? 'close' : 'menu' }}</span>
+        </button>
+      </div>
+      <div v-if="menuOpen" class="nav-sheet" @click="menuOpen = false">
+        <a href="#why">為什麼</a>
+        <a href="#security">安全模型</a>
+        <a href="#features">功能</a>
+        <a href="#start">開始使用</a>
+        <a :href="PLAYGROUND">Playground</a>
+        <a :href="REPO" target="_blank" rel="noopener">GitHub</a>
       </div>
     </nav>
 
@@ -88,7 +112,7 @@ const features = [
           Blockwell 是區塊式富文本編輯器。文件是結構化 JSON，schema 白名單就是安全邊界——不需要 sanitizer，XSS 從格式本身就不存在。
         </p>
         <div class="cta">
-          <a class="btn btn-primary" href="#demo">直接試試看</a>
+          <a class="btn btn-primary" href="#demo" @click="tryIt">直接試試看</a>
           <a class="btn" :href="PLAYGROUND">完整 Playground</a>
         </div>
       </div>
@@ -101,7 +125,7 @@ const features = [
       </div>
       <div class="demo-grid" :data-tab="tab">
         <div class="demo-editor">
-          <BlockwellEditor v-model="doc" :debounce="120" :onboarding="false" />
+          <BlockwellEditor ref="editorRef" v-model="doc" :debounce="120" :onboarding="false" />
         </div>
         <aside class="demo-json" aria-label="即時 JSON">
           <div class="json-head">
@@ -113,7 +137,7 @@ const features = [
         </aside>
       </div>
       <p class="demo-hint">
-        試試：選取文字套用顏色、輸入 <kbd>/</kbd> 插入區塊、<kbd>##</kbd> 加空白變標題、<kbd>⌘</kbd><kbd>/</kbd> 看快捷鍵。右邊就是存進資料庫的內容。
+        試試：選取文字套用顏色、輸入 <kbd>/</kbd> 插入區塊、<kbd>##</kbd> 加空白變標題、<kbd>{{ kbd('⌘/') }}</kbd> 看快捷鍵。右邊就是存進資料庫的內容。
       </p>
     </section>
 
@@ -154,7 +178,7 @@ const features = [
           <ul v-if="findings.length" class="findings">
             <li v-for="f in findings" :key="f"><span class="material-symbols-rounded">shield</span>{{ f }}</li>
           </ul>
-          <JsonView :value="converted.doc" compact />
+          <JsonView :value="converted.doc" compact stable-ids />
         </div>
       </div>
     </section>
