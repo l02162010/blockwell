@@ -252,8 +252,9 @@ export class Editor {
       this.render(true);
       return false;
     }
-    this.apply(res.state, res.tr);
+    // Record first: listeners of the update event read canUndo.
     this.history.record(res.tr);
+    this.apply(res.state, res.tr);
     if (tr.dropped) this.emit('feedback', { level: 'adjust', code: 'length', block: tr.dropped.block, count: tr.dropped.text.length, rest: tr.dropped.text });
     return true;
   }
