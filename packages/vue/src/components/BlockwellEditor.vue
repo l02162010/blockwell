@@ -254,6 +254,31 @@ const showPageToolbar = computed(() => isPage.value && props.toolbar && props.ed
 const showMobileToolbar = computed(() => isPage.value && props.editable && narrow.value && (focused.value || props.layout === 'mobile'));
 const fmt = (n: number) => n.toLocaleString('en-US');
 
+/** A click in the empty space below the document continues it, like a word processor. */
+function onBlankMouseDown(e: MouseEvent) {
+  const t = e.target as Element;
+  if (e.button !== 0 || !props.editable || props.loading || props.diffBase) return;
+  if (t.closest('.bw-editor, button, a, input, textarea, select, [role], [contenteditable]')) return;
+  const ed = editor.value;
+  const last = ed.getJSON().blocks.at(-1);
+  const lastEl = last && ed.blockElement(last.id);
+  if (!lastEl) return;
+  e.preventDefault();
+  if (e.clientY > lastEl.getBoundingClientRect().bottom) return ed.focusEnd();
+  // Beside the text column: put the caret on the nearest line, as if the click were inside.
+  const dom = ed.dom;
+  const r = dom?.getBoundingClientRect();
+  const doc = dom?.ownerDocument as (Document & { caretRangeFromPoint?(x: number, y: number): Range | null }) | undefined;
+  if (!dom || !r || !doc?.caretRangeFromPoint) return;
+  const x = Math.min(Math.max(e.clientX, r.left + 1), r.right - 1);
+  const range = doc.caretRangeFromPoint(x, e.clientY);
+  if (!range || !dom.contains(range.startContainer)) return;
+  dom.focus({ preventScroll: true });
+  const sel = doc.getSelection();
+  sel?.removeAllRanges();
+  sel?.addRange(range);
+}
+
 defineExpose({ editor, submit });
 </script>
 
@@ -272,7 +297,7 @@ defineExpose({ editor, submit });
     <SearchBar v-if="searchOpen" @close="searchOpen = false" />
 
     <div class="bw-body">
-      <div class="bw-scroll">
+      <div class="bw-scroll" @mousedown="onBlankMouseDown">
         <div class="bw-doc">
           <slot name="before" />
           <Skeleton v-if="loading" />

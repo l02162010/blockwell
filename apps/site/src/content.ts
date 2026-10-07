@@ -20,7 +20,7 @@ export const heroDoc = (): Doc => ({
     { id: 'l1', type: 'listItem', attrs: { style: 'todo', checked: true }, text: '新增 cyan 色票' },
     { id: 'l2', type: 'listItem', attrs: { style: 'todo' }, text: '圖片對齊：靠左、置中、滿版' },
     { id: 'l3', type: 'listItem', attrs: { style: 'todo' }, text: '從 Google 文件貼上時保留表格' },
-    { id: 'q', type: 'quote', text: '顏色只能是色盤 token，連結只能是 https 或 mailto。' },
+    { id: 'q', type: 'quote', children: [{ id: 'q1', type: 'paragraph', text: '顏色只能是色盤 token，連結只能是 https 或 mailto。' }] },
     { id: 'c', type: 'code', attrs: { language: 'typescript' }, text: "editor.toggleMark('bold');" },
   ],
 });

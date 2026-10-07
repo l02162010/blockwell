@@ -238,6 +238,21 @@ export function insertEntity(tr: Tr, type: string, attrs?: Attrs): boolean {
 }
 
 /** Enter. */
+/** Adds an empty paragraph after a top-level block (or after the table/quote holding it) and moves the caret there. */
+export function exitBlock(tr: Tr, id: string): boolean {
+  const top = [tr.block(id), ...ancestors(tr.doc, id)].pop()!;
+  const loc = mustLocate(tr.doc, top.id);
+  const next = (loc.parent ? tr.block(loc.parent).children : tr.doc.blocks)?.[loc.index + 1];
+  if (next?.type === 'paragraph' && !next.text) {
+    tr.setSelection(caret(next.id, 0));
+    return true;
+  }
+  const p = emptyParagraph();
+  tr.insertBlock(loc.parent, loc.index + 1, p);
+  tr.setSelection(caret(p.id, 0));
+  return true;
+}
+
 export function splitBlock(tr: Tr): boolean {
   if (tr.selection?.type === 'node') {
     // Enter on a selected image or divider adds a paragraph after it.
@@ -255,7 +270,14 @@ export function splitBlock(tr: Tr): boolean {
   const loc = mustLocate(tr.doc, b.id);
   const len = textLength(b);
 
-  if (spec.blocks[b.type]?.newlines) return insertText(tr, '\n', null);
+  if (spec.blocks[b.type]?.newlines) {
+    // Enter on an empty last line leaves the code block, like a quote.
+    if (pos.offset === len && len > 0 && (b.text ?? '').endsWith('\n')) {
+      tr.deleteText(b.id, len - 1, len);
+      return exitBlock(tr, b.id);
+    }
+    return insertText(tr, '\n', null);
+  }
 
   if (b.type === 'listItem' && len === 0) {
     const indent = Number(b.attrs?.indent ?? 0);

@@ -226,9 +226,9 @@
 .bw-toolbar-page {
   padding: 6px 12px;
   border-bottom: 1px solid var(--bw-line-soft);
-  overflow-x: auto;
-  white-space: nowrap;
-  scrollbar-width: none;
+  /* Wraps instead of hiding buttons behind an invisible horizontal scroll. */
+  flex-wrap: wrap;
+  row-gap: 2px;
 }
 .bw-tool {
   border: 0;

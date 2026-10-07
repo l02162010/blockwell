@@ -158,6 +158,11 @@ export class Editor {
     this.options = options;
     this.editable = options.editable ?? true;
     this.commandOptions = { allowedBlocks: options.allowedBlocks ? new Set(options.allowedBlocks) : null };
+    if (options.doc) {
+      const v = validate(options.doc);
+      // Rendering an invalid document drops whatever the schema does not allow; say so in development.
+      if (!v.ok) console.warn('[blockwell] The initial document does not match the schema:', v.errors.slice(0, 5));
+    }
     this.state = EditorState.create(options.doc);
     const first = textBlocks(this.state.doc)[0];
     if (first) this.state = new EditorState(this.state.doc, caret(first.id, 0));
@@ -1623,6 +1628,23 @@ export class Editor {
       return;
     }
 
+    if (sel?.type === 'text' && isCollapsed(sel)) {
+      const b = getBlock(this.state.doc, sel.focus.block);
+      const top = b && [b, ...ancestors(this.state.doc, b.id)].pop()!;
+      const inBox = !!top && (top.type === 'code' || top.type === 'table' || top.type === 'quote');
+      // Mod-Enter leaves a code block, table or quote; so does ArrowDown on the document's last line.
+      if (inBox && e.key === 'Enter' && mod && !e.shiftKey) {
+        e.preventDefault();
+        this.run((tr) => C.exitBlock(tr, b!.id), { seal: true });
+        return;
+      }
+      if (inBox && (e.key === 'ArrowDown' || e.key === 'ArrowRight') && !e.shiftKey && !mod && top === this.state.doc.blocks.at(-1) && this.atDocEnd(b!, sel.focus.offset, e.key)) {
+        e.preventDefault();
+        this.run((tr) => C.exitBlock(tr, b!.id), { seal: true });
+        return;
+      }
+    }
+
     if (sel?.type === 'node') {
       const order = textBlocks(this.state.doc);
       const all = allBlocks(this.state.doc);
@@ -1643,6 +1665,30 @@ export class Editor {
         if (prev) this.setSelection(caret(prev.id, textLength(prev)));
       }
     }
+  }
+
+  /**
+   * Puts the caret at the end of the document, the way a click in the empty space below the
+   * content should: into the last paragraph, or a new one after a trailing code block, table,
+   * quote, image or divider.
+   */
+  focusEnd() {
+    if (!this.hasFocus) this.dom?.focus({ preventScroll: true });
+    const last = this.state.doc.blocks.at(-1);
+    if (!last || !this.editable) return;
+    if (last.type === 'paragraph') this.setSelection(caret(last.id, textLength(last)));
+    else this.run((tr) => C.exitBlock(tr, last.id), { seal: true });
+  }
+
+  /** Whether the caret is on the last visual line of the last text block (any column for ArrowDown). */
+  private atDocEnd(b: Block, offset: number, key: string): boolean {
+    if (textBlocks(this.state.doc).at(-1)?.id !== b.id) return false;
+    const text = b.text ?? '';
+    if (key === 'ArrowRight') return offset === textLength(b);
+    if (text.slice(offset).includes('\n')) return false;
+    const caretRect = this.rectAt({ block: b.id, offset });
+    const blockRect = this.blockElement(b.id)?.querySelector('[data-bw-text]')?.getBoundingClientRect();
+    return !caretRect || !blockRect || caretRect.bottom > blockRect.bottom - caretRect.height;
   }
 
   private moveCell(block: string, delta: 1 | -1) {
@@ -1671,6 +1717,16 @@ export class Editor {
       if (!owner) return;
       if (name === 'resize' && this.editable) this.startResize(e, owner, action.getAttribute('data-side') === 'left');
       return;
+    }
+    if (!blockEl && this.editable && target === this.dom) {
+      // A click in the empty space below the content puts the caret in a trailing paragraph.
+      const last = this.state.doc.blocks.at(-1);
+      const lastEl = last && this.blockElement(last.id);
+      if (last && lastEl && e.clientY > lastEl.getBoundingClientRect().bottom) {
+        e.preventDefault();
+        this.focusEnd();
+        return;
+      }
     }
     if (blockEl && this.editable) {
       const b = getBlock(this.state.doc, blockEl.getAttribute('data-block-id')!);
