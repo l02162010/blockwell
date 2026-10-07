@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { textBlocks, type Doc, type Editor, type HighlightRange, type UploadResult } from '@blockwell/core';
+import { ancestors, getBlock, textBlocks, type Doc, type Editor, type HighlightRange, type UploadResult } from '@blockwell/core';
 import {
   BlockwellEditor,
   CommentsPanel,
@@ -12,7 +12,7 @@ import {
   type Version,
 } from '@blockwell/vue';
 import { computed, ref, shallowRef, watch } from 'vue';
-import { members, people, previousVersion, sampleDoc } from '../sample';
+import { members, people, sampleDoc, versionSnapshots } from '../sample';
 import SectionHead from './SectionHead.vue';
 
 const props = defineProps<{ uploadImage: (f: File, p: (n: number) => void) => Promise<UploadResult> }>();
@@ -51,35 +51,103 @@ const jump = (p: Person) => {
   if (id) editor.value?.revealBlock(id, { select: true });
 };
 
-// Comments are anchored to a block and a range; the editor only paints them.
-const thread = ref<CommentThread>({
-  id: 't1',
-  anchor: 'JSON 是唯一真相',
-  messages: [
-    { id: 'c1', author: '陳柏翰', color: 'teal', time: '1 小時前', text: '這句可以放到文件開頭，當作設計原則。' },
-    { id: 'c2', author: '林雅婷', color: 'blue', time: '30 分鐘前', text: '同意，下一版調整。' },
-  ],
+// Comments are anchored to a block and a range; the editor only paints them. The host app
+// stores the threads (here: in memory).
+interface Thread extends CommentThread {
+  block: string;
+  from: number;
+  to: number;
+  resolved?: boolean;
+}
+const threads = ref<Thread[]>([]);
+const active = ref<string | null>(null);
+watch(
+  quote,
+  (q) => {
+    if (!q || threads.value.length) return;
+    threads.value = [
+      {
+        id: 't1',
+        anchor: 'JSON 是唯一真相',
+        block: q.id,
+        from: 0,
+        to: 'JSON 是唯一真相'.length,
+        messages: [
+          { id: 'c1', author: '陳柏翰', color: 'teal', time: '1 小時前', text: '這句可以放到文件開頭，當作設計原則。' },
+          { id: 'c2', author: '林雅婷', color: 'blue', time: '30 分鐘前', text: '同意，下一版調整。' },
+        ],
+      },
+    ];
+  },
+  { immediate: true },
+);
+const open = computed(() => threads.value.filter((t) => !t.resolved && getBlock(doc.value, t.block)));
+const thread = computed(() => open.value.find((t) => t.id === active.value) ?? null);
+const topOf = (id: string) => [id, ...ancestors(doc.value, id).map((b) => b.id)].pop()!;
+const commentCounts = computed(() => {
+  const counts: Record<string, number> = {};
+  for (const t of open.value) counts[topOf(t.block)] = (counts[topOf(t.block)] ?? 0) + Math.max(1, t.messages.length);
+  return counts;
 });
-const resolved = ref(false);
-const commentCounts = computed(() => (quote.value && !resolved.value ? { [quoteTop.value!]: thread.value.messages.length } : {}));
-const quoteTop = computed(() => doc.value.blocks.find((b) => b.type === 'quote')?.id);
 const highlights = computed((): Record<string, HighlightRange[]> => {
-  const q = quote.value;
-  return panel.value === 'comments' && q ? { comment: [{ block: q.id, from: 0, to: 'JSON 是唯一真相'.length }] } : {};
+  const t = thread.value;
+  return panel.value === 'comments' && t ? { comment: [{ block: t.block, from: t.from, to: t.to }] } : {};
 });
+const showThread = (t: Thread | undefined) => {
+  // A new thread nobody wrote in is dropped when closed.
+  threads.value = threads.value.filter((x) => x.messages.length > 0 || x.id === t?.id);
+  active.value = t?.id ?? null;
+  panel.value = t ? 'comments' : null;
+};
+/** The bubble's 留言 button: a new thread on the selected words. */
+const newThread = () => {
+  const ed = editor.value;
+  const sel = ed?.selection;
+  if (!ed || sel?.type !== 'text' || sel.anchor.block !== sel.focus.block || sel.anchor.offset === sel.focus.offset) return;
+  const [from, to] = [sel.anchor.offset, sel.focus.offset].sort((x, y) => x - y) as [number, number];
+  const t: Thread = { id: `t${Date.now()}`, anchor: ed.selectedText(), block: sel.focus.block, from, to, messages: [] };
+  threads.value = [...threads.value, t];
+  showThread(t);
+};
+const openThreadAt = (block: string) => showThread(open.value.find((t) => topOf(t.block) === block));
+const toggleComments = () => (panel.value === 'comments' ? showThread(undefined) : showThread(open.value[0]));
 const openShortcuts = () => editor.value?.dom?.dispatchEvent(new KeyboardEvent('keydown', { key: '/', metaKey: true, ctrlKey: true, bubbles: true }));
-const reply = (text: string) =>
-  (thread.value = { ...thread.value, messages: [...thread.value.messages, { id: `c${Date.now()}`, author: '林雅婷', color: 'blue', time: '剛剛', text }] });
+const reply = (text: string) => {
+  const t = thread.value;
+  if (!t) return;
+  threads.value = threads.value.map((x) =>
+    x.id === t.id ? { ...x, messages: [...x.messages, { id: `c${Date.now()}`, author: '林雅婷', color: 'blue', time: '剛剛', text }] } : x,
+  );
+};
+const resolve = () => {
+  const t = thread.value;
+  threads.value = threads.value.map((x) => (x.id === t?.id ? { ...x, resolved: true } : x));
+  showThread(undefined);
+  editor.value?.focus();
+};
 
-const versions: Version[] = [
+// Version history: real snapshots, so every version shows its own diff and can be restored.
+const snapshots = versionSnapshots(sampleDoc());
+const versions = ref<Version[]>([
   { id: 'now', time: '目前版本', who: '林雅婷', what: '編輯中', current: true },
-  { id: 'v4', time: '今天 10:42', who: '林雅婷', what: '新增 1 段、刪除 1 段' },
+  { id: 'v4', time: '今天 10:42', who: '林雅婷', what: '新增連結段落' },
   { id: 'v3', time: '昨天 18:20', who: '陳柏翰', what: '修改引言' },
   { id: 'v2', time: '10月6日 09:15', who: 'Mia', what: '新增 IME 表格' },
   { id: 'v1', time: '10月5日 14:02', who: '林雅婷', what: '建立文件' },
-];
+]);
 const selectedVersion = ref<string | null>('v4');
-const diffBase = computed(() => (panel.value === 'history' && selectedVersion.value && selectedVersion.value !== 'now' ? previousVersion(doc.value) : null));
+const diffBase = computed(() => (panel.value === 'history' && selectedVersion.value ? (snapshots[selectedVersion.value] ?? null) : null));
+const restore = (id: string) => {
+  const snap = snapshots[id];
+  if (!snap) return;
+  doc.value = structuredClone(snap);
+  versions.value = [
+    { ...versions.value[0]!, what: `已還原 ${versions.value.find((v) => v.id === id)?.time}` },
+    ...versions.value.slice(1),
+  ];
+  selectedVersion.value = 'now';
+  panel.value = null;
+};
 
 // The server's validator answers with a JSON pointer; in this demo it rejects the link paragraph.
 const saveError = computed(() => {
@@ -99,7 +167,7 @@ const status = computed(() => (system.value === 'error' ? 'error' : system.value
         <div class="switch-group">
           <span>協作</span>
           <label><input v-model="collab" type="checkbox" /> 協作游標</label>
-          <button type="button" :class="{ on: panel === 'comments' }" @click="panel = panel === 'comments' ? null : 'comments'">留言</button>
+          <button type="button" :class="{ on: panel === 'comments' }" :disabled="!open.length && panel !== 'comments'" :title="open.length ? '' : '沒有未解決的留言；選取文字後按浮動列的留言新增'" @click="toggleComments">留言 {{ open.length || '' }}</button>
           <button type="button" :class="{ on: panel === 'history' }" @click="panel = panel === 'history' ? null : 'history'">版本</button>
         </div>
         <div class="switch-group">
@@ -134,8 +202,8 @@ const status = computed(() => (system.value === 'error' ? 'error' : system.value
         :diff-base="diffBase"
         comments
         @ready="editor = $event"
-        @comment="panel = 'comments'"
-        @comment-open="panel = 'comments'"
+        @comment="newThread"
+        @comment-open="openThreadAt"
         @retry="system = 'saved'"
       >
         <template #before>
@@ -143,13 +211,13 @@ const status = computed(() => (system.value === 'error' ? 'error' : system.value
           <div class="doc-meta">林雅婷 · 10 分鐘前編輯</div>
         </template>
         <template #aside>
-          <CommentsPanel v-if="panel === 'comments' && !resolved" :thread="thread" @reply="reply" @resolve="(resolved = true), (panel = null)" @close="panel = null" />
+          <CommentsPanel v-if="panel === 'comments' && thread" :key="thread.id" :thread="thread" @reply="reply" @resolve="resolve" @close="showThread(undefined)" />
           <HistoryPanel
             v-else-if="panel === 'history'"
             :versions="versions"
             :selected="selectedVersion"
             @select="selectedVersion = $event"
-            @restore="(panel = null)"
+            @restore="restore"
             @close="panel = null"
           />
         </template>

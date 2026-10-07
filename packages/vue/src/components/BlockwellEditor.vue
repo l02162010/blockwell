@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { Editor, type Doc, type EditorOptions, type HighlightRange } from '@blockwell/core';
 import { computed, markRaw, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
-import { provideBlockwell } from '../composables.js';
+import { kbd, provideBlockwell } from '../composables.js';
 import { defaultMessages, type Messages } from '../messages.js';
 import AlignMenu from './AlignMenu.vue';
 import Announcer from './Announcer.vue';
 import BlockHandles from './BlockHandles.vue';
 import BlockActionsMenu from './BlockActionsMenu.vue';
+import BwIcon from './BwIcon.vue';
 import BlockKindMenu from './BlockKindMenu.vue';
 import BubbleMenu from './BubbleMenu.vue';
 import CodeLanguageMenu from './CodeLanguageMenu.vue';
@@ -155,6 +156,7 @@ const slash = shallowRef(ed().slash);
 const mention = shallowRef(ed().mention);
 const searchOpen = ref(false);
 const shortcutsOpen = ref(false);
+const searchSeed = ref({ text: '', n: 0 });
 const offs = [
   ed().on('change', () => {
     clearTimeout(timer);
@@ -172,7 +174,11 @@ const offs = [
     else if (a.type === 'code-language') {
       ctx.open('codeLanguage', () => ed().blockElement(a.block)?.querySelector('.bw-code-lang')?.getBoundingClientRect() ?? null, { block: a.block });
     } else if (a.type === 'shortcuts') shortcutsOpen.value = true;
-    else if (a.type === 'search' && props.variant === 'page') searchOpen.value = true;
+    else if (a.type === 'search' && props.variant === 'page') {
+      // Opening again (search already open) goes back to the field; a selection seeds the query.
+      searchSeed.value = { text: ed().selectedText().slice(0, 100), n: searchSeed.value.n + 1 };
+      searchOpen.value = true;
+    }
     else if (a.type === 'escape') ctx.close();
   }),
   ed().on('refuse', (e) => {
@@ -216,6 +222,7 @@ const narrow = ref(false);
 const keyboardOffset = ref(0);
 let mq: MediaQueryList | null = null;
 const onMq = () => (narrow.value = props.layout === 'mobile' || !!mq?.matches);
+watch(narrow, (v) => (ctx.narrow.value = v), { immediate: true });
 const onViewport = () => {
   const vv = window.visualViewport;
   keyboardOffset.value = vv ? Math.max(0, window.innerHeight - vv.height - vv.offsetTop) : 0;
@@ -292,10 +299,14 @@ defineExpose({ editor, submit });
     ]"
   >
     <Toolbar v-if="showPageToolbar" variant="page" />
+    <!-- Comparing versions: a bar where the toolbar was, so the page does not jump. -->
+    <div v-else-if="isPage && toolbar && diffBase && !narrow" class="bw-toolbar bw-toolbar-page bw-diff-bar">
+      <BwIcon name="history" :size="18" />{{ messages.history.viewing }}
+    </div>
     <Toolbar v-if="variant === 'field' && editable" variant="field" />
     <StatusBanner v-if="saveError" kind="error" :path="saveError.path" @goto="gotoError" @retry="emit('retry')" />
     <StatusBanner v-else-if="offline" kind="offline" :pending="offline.pending" />
-    <SearchBar v-if="searchOpen" @close="searchOpen = false" />
+    <SearchBar v-if="searchOpen" :seed="searchSeed" @close="searchOpen = false" />
 
     <div class="bw-body">
       <div class="bw-scroll" @mousedown="onBlankMouseDown">
@@ -322,7 +333,7 @@ defineExpose({ editor, submit });
 
     <Toolbar v-if="variant === 'comment' && editable && commentOpen" variant="comment" @mention="emit('mention')">
       <template #end>
-        <span class="bw-kbd-hint">⌘↵</span>
+        <span class="bw-kbd-hint">{{ kbd('⌘↵') }}</span>
         <button type="button" class="bw-btn bw-btn-dark" @mousedown.prevent @click="submit">{{ messages.send }}</button>
       </template>
     </Toolbar>
@@ -342,7 +353,7 @@ defineExpose({ editor, submit });
     <TableControls v-if="editable && !narrow" />
     <BlockHandles v-if="isPage && editable && !narrow" />
     <template v-if="narrow">
-      <SlashSheet v-if="slash" mode="slash" />
+      <SlashSheet v-if="slash" mode="slash" :query="slash.query" />
       <SlashSheet v-if="ctx.ui.popover === 'insert'" mode="insert" />
     </template>
     <template v-else>

@@ -97,7 +97,15 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey, true));
 </script>
 
 <template>
-  <div ref="el" class="bw-popover" :style="style" :role="role ?? 'dialog'" :aria-label="label">
+  <!-- Narrow screens: the same content as a bottom sheet (design 02b: no floating menus on phones). -->
+  <template v-if="ctx.narrow.value">
+    <div class="bw-sheet-scrim" @mousedown.self.prevent="ctx.close()" />
+    <div ref="el" class="bw-sheet bw-popover-sheet" :role="role ?? 'dialog'" :aria-label="label">
+      <div class="bw-sheet-grip" />
+      <slot />
+    </div>
+  </template>
+  <div v-else ref="el" class="bw-popover" :style="style" :role="role ?? 'dialog'" :aria-label="label">
     <slot />
   </div>
 </template>

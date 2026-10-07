@@ -1,22 +1,13 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
-import { useBlockwell, visibleRect } from '../composables.js';
+import { computed } from 'vue';
+import { useBlockwell, useLayoutTick, visibleRect } from '../composables.js';
 import BwIcon from './BwIcon.vue';
 
 /** Comment counts at the right edge of commented blocks. */
 const props = defineProps<{ counts: Record<string, number> }>();
 const emit = defineEmits<{ open: [block: string] }>();
 const ctx = useBlockwell();
-const tick = ref(0);
-const bump = () => tick.value++;
-onMounted(() => {
-  window.addEventListener('scroll', bump, true);
-  window.addEventListener('resize', bump);
-});
-onBeforeUnmount(() => {
-  window.removeEventListener('scroll', bump, true);
-  window.removeEventListener('resize', bump);
-});
+const tick = useLayoutTick(() => ctx.editor.value);
 const badges = computed(() => {
   void tick.value;
   void ctx.version.value;

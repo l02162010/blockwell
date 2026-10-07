@@ -570,6 +570,16 @@ export function setBlockKind(tr: Tr, kind: BlockKind, o: CommandOptions): boolea
   if (!allows(o, target.type)) return false;
   const segs = segments(tr);
   let done = false;
+  // Out of a quote: "paragraph" means "not quoted", and a quote cannot hold a code block.
+  for (const { block } of segs) {
+    const loc = mustLocate(tr.doc, block.id);
+    const parent = loc.parent ? tr.block(loc.parent) : null;
+    if (parent?.type === 'quote' && (kind === 'paragraph' || !parentAllows(tr, block.id, target.type))) {
+      liftFromQuote(tr, block.id);
+      done = true;
+    }
+  }
+  if (done && kind === 'paragraph') return true;
   for (const { block } of segs) {
     const b = tr.block(block.id);
     if (!parentAllows(tr, b.id, target.type)) continue;
@@ -588,6 +598,21 @@ export function setBlockKind(tr: Tr, kind: BlockKind, o: CommandOptions): boolea
     done = true;
   }
   return done;
+}
+
+/** Moves one block out of its quote, splitting the quote around it when needed. */
+function liftFromQuote(tr: Tr, id: string) {
+  const loc = mustLocate(tr.doc, id);
+  const quote = tr.block(loc.parent!);
+  const qloc = mustLocate(tr.doc, quote.id);
+  const kids = quote.children ?? [];
+  const before = kids.slice(0, loc.index), after = kids.slice(loc.index + 1);
+  const b = kids[loc.index]!;
+  tr.removeBlock(quote.id);
+  let at = qloc.index;
+  if (before.length) tr.insertBlock(qloc.parent, at++, { ...quote, children: before });
+  tr.insertBlock(qloc.parent, at++, b);
+  if (after.length) tr.insertBlock(qloc.parent, at, { id: newId(), type: 'quote', children: after });
 }
 
 function toggleQuote(tr: Tr, o: CommandOptions): boolean {

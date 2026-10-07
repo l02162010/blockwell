@@ -5,7 +5,7 @@ export type BlockChange = 'added' | 'removed' | 'changed';
 export interface DocDiff {
   /** Blocks of both versions in reading order: removed blocks sit where they used to be. */
   doc: Doc;
-  /** Change per top-level block id; unchanged blocks are absent. */
+  /** Change per top-level block id; unchanged blocks are absent. The old version of a changed block is included as `<id>_was`, marked removed. */
   changes: Record<string, BlockChange>;
 }
 
@@ -26,11 +26,18 @@ export function diffDocs(base: Doc, current: Doc): DocDiff {
   let i = 0, j = 0;
   while (i < n || j < m) {
     if (i < n && j < m && a[i]!.id === b[j]!.id) {
-      if (JSON.stringify(a[i]) !== JSON.stringify(b[j])) changes[b[j]!.id] = 'changed';
+      if (JSON.stringify(a[i]) !== JSON.stringify(b[j])) {
+        // A changed block shows its old version (as removed) right above the new one.
+        const was = renamed(a[i]!);
+        changes[was.id] = 'removed';
+        changes[b[j]!.id] = 'changed';
+        blocks.push(was);
+      }
       blocks.push(b[j]!);
       i++;
       j++;
-    } else if (j < m && (i >= n || lcs[i]![j + 1]! >= lcs[i + 1]![j]!)) {
+    } else if (j < m && (i >= n || lcs[i]![j + 1]! > lcs[i + 1]![j]!)) {
+      // On a tie the old block goes first, so a replacement reads "removed, then added".
       changes[b[j]!.id] = 'added';
       blocks.push(b[j]!);
       j++;
@@ -45,4 +52,11 @@ export function diffDocs(base: Doc, current: Doc): DocDiff {
     }
   }
   return { doc: { version: 1, blocks }, changes };
+}
+
+/** A copy of an old block with ids that cannot clash with the current version's. */
+function renamed(b: Block): Block {
+  const out: Block = { ...b, id: `${b.id}_was`.slice(-64) };
+  if (b.children) out.children = b.children.map(renamed);
+  return out;
 }

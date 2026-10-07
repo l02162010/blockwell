@@ -219,6 +219,9 @@ export class Editor {
     this.editable = editable;
     if (this.dom) {
       this.dom.contentEditable = String(editable);
+      // Read-only content can still take focus, for ⌘F, ⌘/ and keyboard scrolling.
+      if (editable) this.dom.removeAttribute('tabindex');
+      else this.dom.tabIndex = 0;
       this.dom.classList.toggle('bw-readonly', !editable);
       this.render(true);
     }
@@ -845,6 +848,18 @@ export class Editor {
     this.insertText(' ');
   }
 
+  /** Types `@` at the caret and opens the mention picker (the comment box's @ button). */
+  startMention() {
+    if (!this.options.mentions) return;
+    if (!this.hasFocus) this.focus();
+    const sel = this.state.selection;
+    const b = sel?.type === 'text' ? getBlock(this.state.doc, sel.focus.block) : null;
+    const prev = b && sel?.type === 'text' ? (b.text ?? '')[sel.focus.offset - 1] : undefined;
+    if (prev && /[\x21-\x7E]/.test(prev)) this.insertText(' ');
+    if (!this.insertText('@')) return;
+    this.maybeOpenTrigger();
+  }
+
   /** Types `/` at the caret and opens the slash menu, as if the user had typed it. */
   startSlash() {
     if (!this.insertText('/')) return;
@@ -955,6 +970,7 @@ export class Editor {
     root.classList.add('bw-editor');
     root.classList.toggle('bw-readonly', !this.editable);
     root.contentEditable = String(this.editable);
+    if (!this.editable) root.tabIndex = 0;
     root.setAttribute('role', 'textbox');
     root.setAttribute('aria-multiline', 'true');
     root.setAttribute('translate', 'no');
@@ -1252,6 +1268,15 @@ export class Editor {
     if (!s || !s.matches.length) return;
     s.index = (s.index + dir + s.matches.length) % s.matches.length;
     this.showMatch();
+  }
+
+  /** The selected text when the selection is inside one block (e.g. to seed a search), else ''. */
+  selectedText(): string {
+    const sel = this.state.selection;
+    if (sel?.type !== 'text' || sel.anchor.block !== sel.focus.block) return '';
+    const b = getBlock(this.state.doc, sel.focus.block);
+    const [from, to] = [sel.anchor.offset, sel.focus.offset].sort((x, y) => x - y);
+    return (b?.text ?? '').slice(from, to).replace(/\uFFFC/g, '');
   }
 
   /** Selects the current search match, e.g. when the search bar closes. */
@@ -1803,11 +1828,54 @@ export class Editor {
       const b = getBlock(this.state.doc, sel.focus.block);
       const top = b && [b, ...ancestors(this.state.doc, b.id)].pop()!;
       const inBox = !!top && (top.type === 'code' || top.type === 'table' || top.type === 'quote');
+      // Mod-Enter ticks a to-do.
+      if (e.key === 'Enter' && mod && !e.shiftKey && b?.type === 'listItem' && b.attrs?.style === 'todo') {
+        e.preventDefault();
+        this.toggleChecked(b.id);
+        return;
+      }
       // Mod-Enter leaves a code block, table or quote; so does ArrowDown on the document's last line.
       if (inBox && e.key === 'Enter' && mod && !e.shiftKey) {
         e.preventDefault();
         this.run((tr) => C.exitBlock(tr, b!.id), { seal: true });
         return;
+      }
+      // Arrow keys stop on an image or divider next to the caret (it gets selected), instead of
+      // jumping over it.
+      if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && !e.shiftKey && !mod && !e.altKey && b && top && top.type !== 'table') {
+        const down = e.key === 'ArrowDown';
+        const all = this.state.doc.blocks;
+        const i = all.indexOf(top);
+        const neighbour = all[i + (down ? 1 : -1)];
+        const lastOfTop = textBlocks({ version: 1, blocks: [top] });
+        const edge = down ? lastOfTop.at(-1) : lastOfTop[0];
+        if (neighbour && isAtom(neighbour) && edge?.id === b.id && this.onEdgeLine(b, sel.focus.offset, down)) {
+          e.preventDefault();
+          this.setSelection({ type: 'node', block: neighbour.id });
+          return;
+        }
+      }
+      // Up and down in a table go to the cell above or below, not the one beside.
+      if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && !e.shiftKey && !mod && !e.altKey && top?.type === 'table' && b) {
+        const down = e.key === 'ArrowDown';
+        const ctx = C.cellContext(this.state.tr(), b.id);
+        const own = ctx ? textBlocks({ version: 1, blocks: [ctx.rows[ctx.row]!.children![ctx.col]!] }) : [];
+        const edgeBlock = down ? own.at(-1) : own[0];
+        if (ctx && edgeBlock?.id === b.id && this.onEdgeLine(b, sel.focus.offset, down)) {
+          const cell = ctx.rows[ctx.row + (down ? 1 : -1)]?.children?.[ctx.col];
+          const texts = cell ? textBlocks({ version: 1, blocks: [cell] }) : [];
+          const target = down ? texts[0] : texts.at(-1);
+          if (target) {
+            e.preventDefault();
+            this.setSelection(caret(target.id, down ? 0 : textLength(target)));
+            return;
+          }
+          if (down && top === this.state.doc.blocks.at(-1)) {
+            e.preventDefault();
+            this.run((tr) => C.exitBlock(tr, b.id), { seal: true });
+            return;
+          }
+        }
       }
       if (inBox && (e.key === 'ArrowDown' || e.key === 'ArrowRight') && !e.shiftKey && !mod && top === this.state.doc.blocks.at(-1) && this.atDocEnd(b!, sel.focus.offset, e.key)) {
         e.preventDefault();
@@ -1849,6 +1917,16 @@ export class Editor {
     if (!last || !this.editable) return;
     if (last.type === 'paragraph') this.setSelection(caret(last.id, textLength(last)));
     else this.run((tr) => C.exitBlock(tr, last.id), { seal: true });
+  }
+
+  /** Whether the caret is on the first (`down` false) or last visual line of its text. */
+  private onEdgeLine(b: Block, offset: number, down: boolean): boolean {
+    const text = b.text ?? '';
+    if (down ? text.slice(offset).includes('\n') : text.slice(0, offset).includes('\n')) return false;
+    const c = this.rectAt({ block: b.id, offset });
+    const box = this.blockElement(b.id)?.querySelector('[data-bw-text]')?.getBoundingClientRect() ?? this.blockElement(b.id)?.getBoundingClientRect();
+    if (!c || !box) return true;
+    return down ? c.bottom > box.bottom - c.height : c.top < box.top + c.height;
   }
 
   /** Whether the caret is on the last visual line of the last text block (any column for ArrowDown). */

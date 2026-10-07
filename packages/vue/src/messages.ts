@@ -13,6 +13,7 @@ export interface Messages {
   link: string;
   color: string;
   insert: [string, string];
+  toolbar: string;
   slashHint: [string, string];
   placeholder: string;
   textColor: [string, string];
@@ -100,8 +101,8 @@ export interface Messages {
   virtualized: (n: number) => string;
   printAll: string;
   presence: { online: (n: number) => [string, string]; you: string; jump: string; follow: [string, string] };
-  comments: { title: [string, string]; reply: string; resolve: string };
-  history: { title: [string, string]; added: string; removed: string; restore: string };
+  comments: { title: [string, string]; reply: string; first: string; resolve: string };
+  history: { title: [string, string]; added: string; removed: string; restore: string; viewing: string };
   close: string;
   tokenNames: Record<string, string>;
   announce: (what: string, on: boolean) => string;
@@ -129,6 +130,7 @@ export const defaultMessages: Messages = {
   link: '連結 Link',
   color: '顏色 Color',
   insert: ['插入', 'Insert'],
+  toolbar: '格式工具列 Formatting',
   slashHint: ['輸入', '插入區塊'],
   placeholder: '輸入 / 插入區塊 · Type / for commands',
   textColor: ['文字色', 'Text'],
@@ -285,8 +287,8 @@ export const defaultMessages: Messages = {
   virtualized: (n) => `${n.toLocaleString('en-US')} 個區塊 · 已啟用虛擬化`,
   printAll: '列印時渲染全部',
   presence: { online: (n) => [`${n} 人在線`, `${n} online`], you: '（你）', jump: '前往', follow: ['跟隨游標', 'Follow'] },
-  comments: { title: ['留言', 'Comments'], reply: '回覆… Reply', resolve: '解決 · Resolve' },
-  history: { title: ['版本紀錄', 'History'], added: '新增', removed: '刪除', restore: '還原此版本 · Restore' },
+  comments: { title: ['留言', 'Comments'], reply: '回覆… Reply', first: '寫下留言… Add a comment', resolve: '解決 · Resolve' },
+  history: { title: ['版本紀錄', 'History'], added: '新增', removed: '刪除', restore: '還原此版本 · Restore', viewing: '正在檢視與目前版本的差異 · 唯讀 Comparing with the current version · read-only' },
   close: '關閉 Close',
   tokenNames: {
     default: '預設 default', gray: '灰色 gray', brown: '棕色 brown', red: '紅色 red', orange: '橙色 orange', yellow: '黃色 yellow',

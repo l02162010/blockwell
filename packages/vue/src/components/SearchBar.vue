@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { nextTick, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue';
+import { nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
 import { useBlockwell } from '../composables.js';
 import BwIcon from './BwIcon.vue';
 
 /** ⌘F — searches the model, so blocks that are not rendered (large documents) are found too. */
+const props = defineProps<{ seed?: { text: string; n: number } }>();
 const emit = defineEmits<{ close: [] }>();
 const ctx = useBlockwell();
 const m = ctx.messages;
@@ -12,9 +13,21 @@ const query = ref('');
 const input = ref<HTMLInputElement | null>(null);
 const state = shallowRef(ed().search);
 let off: (() => void) | null = null;
+/** Each ⌘F focuses the field and selects it, taking the editor's selected text when there is one. */
+const focusField = () => {
+  if (props.seed?.text) {
+    query.value = props.seed.text;
+    ed().find(query.value);
+  }
+  nextTick(() => {
+    input.value?.focus();
+    input.value?.select();
+  });
+};
+watch(() => props.seed?.n, focusField);
 onMounted(() => {
   off = ed().on('search', (e) => (state.value = e.search));
-  nextTick(() => input.value?.focus());
+  focusField();
 });
 onBeforeUnmount(() => {
   off?.();
@@ -26,6 +39,8 @@ const onInput = () => {
   timer = window.setTimeout(() => ed().find(query.value), 120);
 };
 const close = () => {
+  clearTimeout(timer);
+  if (query.value && state.value?.query !== query.value) ed().find(query.value);
   // Leave the caret on what was found, so the search was worth something.
   ed().selectSearchMatch();
   emit('close');

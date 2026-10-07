@@ -6,6 +6,7 @@ import {
   onMounted,
   provide,
   reactive,
+  ref,
   shallowRef,
   watch,
   type InjectionKey,
@@ -77,6 +78,8 @@ export interface BlockwellContext {
   version: ShallowRef<number>;
   ui: UiState;
   messages: Messages;
+  /** Narrow layout: popovers open as bottom sheets. */
+  narrow: Ref<boolean>;
   open(kind: Exclude<PopoverKind, null>, anchor: (() => DOMRect | null) | null, opts?: { block?: string | null; source?: UiState['source'] }): void;
   close(): void;
   toggle(kind: Exclude<PopoverKind, null>, anchor: (() => DOMRect | null) | null, opts?: { block?: string | null; source?: UiState['source'] }): void;
@@ -95,6 +98,7 @@ export function provideBlockwell(editor: ShallowRef<Editor>, messages: Messages 
     version,
     ui,
     messages,
+    narrow: ref(false),
     open(kind, anchor, opts = {}) {
       ui.popover = kind;
       ui.anchor = anchor ? markRaw(anchor) : null;
@@ -216,6 +220,38 @@ export function useFloating(
   return { style, update: schedule };
 }
 
+/**
+ * A counter that changes whenever things drawn over the editor (badges, remote carets) may need
+ * placing again: scrolling, window resizes, and the editor reflowing (a side panel opening).
+ */
+export function useLayoutTick(editor: () => { dom: HTMLElement | null }) {
+  const tick = ref(0);
+  let frame = 0;
+  const bump = () => {
+    cancelAnimationFrame(frame);
+    frame = requestAnimationFrame(() => tick.value++);
+  };
+  let ro: ResizeObserver | null = null;
+  onMounted(() => {
+    window.addEventListener('scroll', bump, true);
+    window.addEventListener('resize', bump);
+    const dom = editor().dom;
+    if (dom && typeof ResizeObserver !== 'undefined') {
+      ro = new ResizeObserver(bump);
+      ro.observe(dom);
+      const scroller = dom.closest('.bw-scroll');
+      if (scroller) ro.observe(scroller);
+    }
+  });
+  onBeforeUnmount(() => {
+    cancelAnimationFrame(frame);
+    ro?.disconnect();
+    window.removeEventListener('scroll', bump, true);
+    window.removeEventListener('resize', bump);
+  });
+  return tick;
+}
+
 /** Closes something when a pointer goes down outside the given elements. */
 export function useOutside(els: () => (HTMLElement | null | undefined)[], fn: () => void) {
   const handler = (e: PointerEvent) => {
@@ -233,6 +269,12 @@ export function visibleRect(editor: { dom: HTMLElement | null }): DOMRect | null
   if (!dom) return null;
   return ((dom.closest('.bw-scroll') as HTMLElement | null) ?? dom).getBoundingClientRect();
 }
+
+export const isMac = typeof navigator !== 'undefined' && /Mac|iP(hone|ad|od)/.test(navigator.platform || navigator.userAgent);
+
+/** A shortcut written Mac-style ("⌘ ⇧ X", "⌘↵") as this platform shows it ("Ctrl+Shift+X", "Ctrl+Enter"). */
+export const kbd = (keys: string): string =>
+  isMac ? keys : keys.replace(/⌘ ?/g, 'Ctrl+').replace(/⌥ ?/g, 'Alt+').replace(/⇧ ?/g, 'Shift+').replace(/↵/g, 'Enter');
 
 /** Keeps toolbar buttons from taking focus away from the editor. */
 export const keepFocus = (e: MouseEvent) => e.preventDefault();

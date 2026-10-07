@@ -87,7 +87,7 @@ export function sampleDoc(): Doc {
           row(cell('Android'), cell('Chrome'), cell('Gboard 注音')),
         ],
       },
-      { id: id(), type: 'image', attrs: { src: 'https://assets.example.invalid/editor-v2.png', alt: '產品截圖 · product screenshot' } },
+      { id: id(), type: 'image', attrs: { src: 'https://picsum.photos/seed/blockwell-editor/1200/640', alt: '產品截圖 · product screenshot', width: 520 } },
       rich('paragraph', [{ text: '圖 1　新版編輯器介面', marks: [['color', { value: 'gray' }]] }], { align: 'center' }),
       { id: id(), type: 'divider' },
       p(''),
@@ -131,6 +131,21 @@ Object.assign(people, { u_chen2: '陳怡君', u_chen3: '陳志明' });
  * The version before the live document: without the "完整規格見…" paragraph, and with a paragraph
  * that was deleted since. The diff then shows one addition and one removal.
  */
+/** Snapshots for the version-history demo, each a little older than the one before. */
+export function versionSnapshots(current: Doc): Record<string, Doc> {
+  const v4 = previousVersion(current);
+  const v3: Doc = {
+    version: 1,
+    blocks: v4.blocks.map((b) =>
+      b.type === 'quote' ? { ...b, children: [{ id: 'v_q', type: 'paragraph', text: '我們以 JSON 為主，畫面只是它的投影。' }] } : b,
+    ),
+  };
+  const t = v3.blocks.findIndex((b) => b.type === 'table');
+  const v2: Doc = { version: 1, blocks: v3.blocks.filter((_, i) => i !== t && i !== t - 1) };
+  const v1: Doc = { version: 1, blocks: [...v2.blocks.slice(0, 2), { id: 'v_p', type: 'paragraph', text: '' }] };
+  return { v4, v3, v2, v1 };
+}
+
 export function previousVersion(current: Doc): Doc {
   const blocks = current.blocks.slice();
   const i = blocks.findIndex((b) => b.text?.startsWith('完整規格見'));

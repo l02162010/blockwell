@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { nextTick, onMounted, ref } from 'vue';
 import { defaultMessages, type Messages } from '../messages.js';
 import BwIcon from './BwIcon.vue';
 
@@ -22,6 +22,9 @@ const props = defineProps<{ thread: CommentThread; messages?: Messages }>();
 const emit = defineEmits<{ reply: [text: string]; resolve: []; close: [] }>();
 const m = props.messages ?? defaultMessages;
 const draft = ref('');
+const input = ref<HTMLInputElement | null>(null);
+// A new thread starts with its first message.
+onMounted(() => props.thread.messages.length === 0 && nextTick(() => input.value?.focus()));
 const send = () => {
   const t = draft.value.trim();
   if (!t) return;
@@ -46,11 +49,11 @@ const send = () => {
         </div>
       </div>
       <form class="bw-reply" @submit.prevent="send">
-        <input v-model="draft" type="text" :placeholder="m.comments.reply" :aria-label="m.comments.reply" />
+        <input ref="input" v-model="draft" type="text" :placeholder="thread.messages.length ? m.comments.reply : m.comments.first" :aria-label="m.comments.reply" />
         <button type="submit" class="bw-mini" :disabled="!draft.trim()" aria-label="Send"><BwIcon name="send" :size="18" /></button>
       </form>
     </div>
-    <div class="bw-panel-foot">
+    <div v-if="thread.messages.length" class="bw-panel-foot">
       <button type="button" class="bw-btn bw-btn-block" @click="emit('resolve')"><BwIcon name="check" :size="16" />{{ m.comments.resolve }}</button>
     </div>
   </aside>
