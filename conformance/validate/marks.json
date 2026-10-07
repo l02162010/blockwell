@@ -99,6 +99,14 @@
       "errors": ["invalid_attr"]
     },
     {
+      "name": "cyan is a palette token",
+      "doc": { "version": 1, "blocks": [ { "id": "p", "type": "paragraph", "text": "abc", "marks": [
+        { "type": "color", "from": 0, "to": 1, "attrs": { "value": "cyan" } },
+        { "type": "highlight", "from": 1, "to": 3, "attrs": { "value": "cyan" } }
+      ] } ] },
+      "valid": true
+    },
+    {
       "name": "unknown key on a mark",
       "doc": { "version": 1, "blocks": [ { "id": "p", "type": "paragraph", "text": "abc", "marks": [
         { "type": "bold", "from": 0, "to": 3, "onclick": "x" }

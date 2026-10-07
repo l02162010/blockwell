@@ -64,8 +64,8 @@
       ] },
       "expected": [
         { "type": "divider" },
-        { "type": "image", "src": "https://cdn.example.com/a.png", "alt": "" },
-        { "type": "image", "src": "https://cdn.example.com/b.png", "alt": "B", "width": 320 }
+        { "type": "image", "src": "https://cdn.example.com/a.png", "alt": "", "align": "center" },
+        { "type": "image", "src": "https://cdn.example.com/b.png", "alt": "B", "width": 320, "align": "center" }
       ]
     }
   ]

@@ -17,7 +17,7 @@
     "link": ["https", "mailto"],
     "image": ["https"]
   },
-  "palette": ["gray", "brown", "red", "orange", "yellow", "green", "teal", "blue", "purple", "pink"],
+  "palette": ["gray", "brown", "red", "orange", "yellow", "green", "teal", "cyan", "blue", "purple", "pink"],
   "codeLanguages": ["plaintext", "javascript", "typescript", "json", "html", "css", "bash", "python", "go", "rust", "csharp", "java", "sql", "yaml", "markdown"],
   "blocks": {
     "paragraph": {
@@ -55,7 +55,8 @@
       "attrs": {
         "src": { "type": "url", "schemes": "$urlSchemes.image", "required": true },
         "alt": { "type": "string", "maxLength": "$limits.maxAltLength", "default": "" },
-        "width": { "type": "int", "min": 16, "max": 2000 }
+        "width": { "type": "int", "min": 16, "max": 2000 },
+        "align": { "type": "enum", "values": ["left", "center", "full"], "default": "center" }
       }
     },
     "quote": { "content": "children", "attrs": {}, "children": ["paragraph", "heading", "listItem"] },

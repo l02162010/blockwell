@@ -8,6 +8,7 @@
     "yellow": { "light": { "text": "#A16207", "bg": "#FEF9C3" }, "dark": { "text": "#FACC15", "bg": "#423A0F" }, "print": { "text": "#854D0E", "bg": "#FEF9C3" } },
     "green":  { "light": { "text": "#15803D", "bg": "#DCFCE7" }, "dark": { "text": "#4ADE80", "bg": "#14352A" }, "print": { "text": "#166534", "bg": "#DCFCE7" } },
     "teal":   { "light": { "text": "#0F766E", "bg": "#CCFBF1" }, "dark": { "text": "#2DD4BF", "bg": "#11393A" }, "print": { "text": "#115E59", "bg": "#CCFBF1" } },
+    "cyan":   { "light": { "text": "#0E7490", "bg": "#CFFAFE" }, "dark": { "text": "#22D3EE", "bg": "#123A44" }, "print": { "text": "#155E75", "bg": "#CFFAFE" } },
     "blue":   { "light": { "text": "#2563EB", "bg": "#DBEAFE" }, "dark": { "text": "#60A5FA", "bg": "#1E3354" }, "print": { "text": "#1D4ED8", "bg": "#DBEAFE" } },
     "purple": { "light": { "text": "#7C3AED", "bg": "#EDE9FE" }, "dark": { "text": "#A78BFA", "bg": "#33275A" }, "print": { "text": "#6D28D9", "bg": "#EDE9FE" } },
     "pink":   { "light": { "text": "#DB2777", "bg": "#FCE7F3" }, "dark": { "text": "#F472B6", "bg": "#4A1D35" }, "print": { "text": "#BE185D", "bg": "#FCE7F3" } }

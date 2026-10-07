@@ -1,0 +1,46 @@
+{
+  "name": "@blockwell/vue",
+  "version": "0.0.0",
+  "description": "Vue 3 adapter and UI kit for the Blockwell editor.",
+  "license": "MIT",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/l02162010/blockwell.git",
+    "directory": "packages/vue"
+  },
+  "sideEffects": [
+    "**/*.css",
+    "./src/index.ts",
+    "./dist/index.js"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./style.css": "./dist/blockwell.css"
+  },
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "vite build && vue-tsc -p tsconfig.build.json",
+    "typecheck": "vue-tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@blockwell/core": "workspace:*",
+    "@blockwell/schema": "workspace:*"
+  },
+  "peerDependencies": {
+    "vue": "^3.4.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^6.0.9",
+    "vite": "^8.3.3",
+    "vue": "^3.5.43",
+    "vue-tsc": "^3.3.12"
+  }
+}
