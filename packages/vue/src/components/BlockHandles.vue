@@ -10,6 +10,7 @@ const m = ctx.messages;
 const ed = () => ctx.editor.value;
 const hovered = ref<{ id: string; top: number; left: number } | null>(null);
 const drop = ref<{ top: number; left: number; width: number } | null>(null);
+const ghost = ref<{ x: number; y: number; text: string; todo: boolean } | null>(null);
 let dragging: { id: string; index: number } | null = null;
 
 const topBlockAt = (y: number): HTMLElement | null => {
@@ -78,9 +79,16 @@ const startDrag = (e: PointerEvent) => {
   const blocks = () => Array.from(root.children) as HTMLElement[];
   const from = blocks().findIndex((b) => b.getAttribute('data-block-id') === id);
   dragging = { id, index: from };
+  const source = root.children[from] as HTMLElement | undefined;
+  const label = (source?.textContent ?? '').trim().slice(0, 60) || source?.getAttribute('data-type') || '';
+  const todo = source?.classList.contains('bw-li-todo') ?? false;
   const move = (ev: PointerEvent) => {
-    if (Math.abs(ev.clientY - startY) > 4) moved = true;
+    if (Math.abs(ev.clientY - startY) > 4 && !moved) {
+      moved = true;
+      ed().setBlockClasses('drag', { [id]: 'bw-dragging' });
+    }
     if (!moved) return;
+    ghost.value = { x: ev.clientX + 8, y: ev.clientY + 10, text: label, todo };
     const list = blocks();
     let index = list.length;
     for (let i = 0; i < list.length; i++) {
@@ -102,6 +110,8 @@ const startDrag = (e: PointerEvent) => {
     const d = dragging;
     dragging = null;
     drop.value = null;
+    ghost.value = null;
+    ed().setBlockClasses('drag', {});
     if (!d) return;
     if (!moved) {
       ed().focus();
@@ -122,4 +132,7 @@ const startDrag = (e: PointerEvent) => {
     <button type="button" class="bw-handle bw-grab" :aria-label="m.dragBlock" :title="m.dragBlock" @pointerdown="startDrag"><BwIcon name="drag_indicator" :size="18" /></button>
   </div>
   <div v-if="drop" class="bw-drop-line" :style="{ top: `${drop.top}px`, left: `${drop.left}px`, width: `${drop.width}px` }" />
+  <div v-if="ghost" class="bw-drag-ghost" :style="{ top: `${ghost.y}px`, left: `${ghost.x}px` }" aria-hidden="true">
+    <BwIcon name="drag_indicator" :size="18" class="bw-muted" /><span v-if="ghost.todo" class="bw-ghost-check" />{{ ghost.text }}
+  </div>
 </template>

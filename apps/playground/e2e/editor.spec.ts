@@ -129,8 +129,8 @@ test('colors come from the palette', async ({ page }) => {
   await page.keyboard.type('colorful');
   await select(page, 'color');
   await page.locator('.bw-bubble:visible .bw-tool-color').click();
-  await page.locator('.bw-swatch-text[title="red"]').click();
-  await page.locator('.bw-swatch-bg[title="yellow"]').click();
+  await page.locator('.bw-swatch-text[title="紅色 red"]').click();
+  await page.locator('.bw-swatch-bg[title="黃色 yellow"]').click();
   const marks = (await last(page)).marks;
   expect(marks).toContainEqual({ type: 'color', from: 0, to: 5, attrs: { value: 'red' } });
   expect(marks).toContainEqual({ type: 'highlight', from: 0, to: 5, attrs: { value: 'yellow' } });
@@ -186,9 +186,9 @@ test('to-do checkbox toggles', async ({ page }) => {
 });
 
 test('read-only blocks editing', async ({ page }) => {
-  await page.getByLabel('唯讀 Read-only').check();
+  await page.getByLabel('唯讀', { exact: true }).check();
   await expect(page01(page)).toHaveAttribute('contenteditable', 'false');
-  await expect(page.locator('.bw-toolbar-page')).toHaveCount(0);
+  await expect(page.locator('.frame .bw-toolbar-page')).toHaveCount(0);
   const before = await blocks(page);
   await page01(page).locator('.bw-check').first().click();
   expect(await blocks(page)).toEqual(before);

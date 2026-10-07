@@ -59,7 +59,7 @@ export function useEditorState(editor: Ref<Editor | null>) {
   return { active, version, refresh };
 }
 
-export type PopoverKind = 'block' | 'color' | 'link' | 'codeLanguage' | 'tableColumn' | 'tableRow' | 'imageAlt' | 'insert' | null;
+export type PopoverKind = 'block' | 'align' | 'color' | 'link' | 'codeLanguage' | 'tableColumn' | 'tableRow' | 'imageAlt' | 'insert' | null;
 
 export interface UiState {
   popover: PopoverKind;

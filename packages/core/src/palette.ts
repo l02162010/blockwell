@@ -24,6 +24,7 @@ export function paletteCss(): string {
   return (
     `:root{${vars('light')}}` +
     `[data-theme="dark"],.dark{${vars('dark')}}` +
+    `[data-theme="light"]{${vars('light')}}` +
     `@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){${vars('dark')}}}` +
     `@media print{:root{${vars('print')}}}` +
     classes

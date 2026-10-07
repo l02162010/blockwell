@@ -85,14 +85,35 @@ onMounted(() => {
 });
 onBeforeUnmount(() => off?.());
 const flatIndex = (it: SlashItem) => items.value.indexOf(it);
+const optionId = (it: SlashItem) => `bw-slash-${it.id}`;
+// Focus stays in the editor; the listbox is announced through aria-activedescendant (design §07).
+watch(
+  [index, items],
+  () => {
+    const it = items.value[index.value];
+    const dom = ed().dom;
+    if (!dom) return;
+    dom.setAttribute('aria-controls', 'bw-slash-list');
+    dom.setAttribute('aria-expanded', 'true');
+    if (it) dom.setAttribute('aria-activedescendant', optionId(it));
+  },
+  { immediate: true },
+);
+onBeforeUnmount(() => {
+  const dom = ed().dom;
+  dom?.removeAttribute('aria-controls');
+  dom?.removeAttribute('aria-activedescendant');
+  dom?.setAttribute('aria-expanded', 'false');
+});
 </script>
 
 <template>
-  <div ref="el" class="bw-popover bw-slash" :style="style" role="listbox" :aria-label="m.insert.join(' ')">
+  <div id="bw-slash-list" ref="el" class="bw-popover bw-slash" :style="style" role="listbox" :aria-label="m.insert.join(' ')">
     <template v-for="g in groups" :key="g.id">
       <div class="bw-slash-group">{{ g.label[0] }} · {{ g.label[1] }}</div>
       <div
         v-for="it in g.items"
+        :id="optionId(it)"
         :key="it.id"
         class="bw-slash-item"
         :class="{ 'bw-current': flatIndex(it) === index }"

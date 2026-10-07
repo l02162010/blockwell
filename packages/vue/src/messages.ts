@@ -53,6 +53,56 @@ export interface Messages {
   hideKeyboard: string;
   more: string;
   features: Record<string, string>;
+  turnInto: [string, string];
+  align: [string, string];
+  alignments: Record<'left' | 'center' | 'right', string>;
+  imageAlign: Record<'left' | 'center' | 'full', string>;
+  conversionWarning: (marks: number, types: string[], mentions: number) => [string, string];
+  inlineCodeHint: [string, string];
+  members: [string, string];
+  membersNote: string;
+  ruleApplied: (label: string) => string;
+  ruleRevert: string;
+  shortcutsTitle: [string, string];
+  shortcutsSearch: string;
+  shortcutGroups: { zh: string; en: string; items: [string, string, string][] }[];
+  feedback: {
+    length: (n: number) => [string, string];
+    lengthAction: string;
+    imageSrc: [string, string];
+    imageSrcAction: string;
+    unsupported: (n: number) => [string, string];
+    unsupportedAction: string;
+    invalid: [string, string];
+    supported: string;
+  };
+  pasteSources: Record<'html' | 'gdocs' | 'word' | 'markdown' | 'blockwell' | 'text', [string, string]>;
+  pasteCounts: (counts: Record<string, number>, prefix: string) => string;
+  removedKinds: Record<string, string>;
+  keepSource: string;
+  insertSheet: [string, string];
+  search: string;
+  searchPlaceholder: string;
+  swipe: string;
+  tableBar: { addRow: string; addCol: string; delete: string; more: string };
+  emptyHint: string;
+  onboarding: { items: [string, string, string][]; dismiss: string };
+  placeholders: Partial<Record<BlockKind, string>>;
+  copied: string;
+  saveStatus: Record<'saving' | 'saved' | 'offline' | 'error', string>;
+  saveFailed: (index: number, field: string) => [string, string];
+  gotoBlock: string;
+  retry: string;
+  offlineBanner: [string, string];
+  pending: (n: number) => string;
+  virtualized: (n: number) => string;
+  printAll: string;
+  presence: { online: (n: number) => [string, string]; you: string; jump: string; follow: [string, string] };
+  comments: { title: [string, string]; reply: string; resolve: string };
+  history: { title: [string, string]; added: string; removed: string; restore: string };
+  close: string;
+  tokenNames: Record<string, string>;
+  announce: (what: string, on: boolean) => string;
 }
 
 export const defaultMessages: Messages = {
@@ -155,6 +205,96 @@ export const defaultMessages: Messages = {
     table: '表格',
     image: '圖片',
     divider: '分隔線',
+  },
+  turnInto: ['轉換為', 'Turn into'],
+  align: ['對齊', 'Align'],
+  alignments: { left: '靠左 Left', center: '置中 Center', right: '靠右 Right' },
+  imageAlign: { left: '靠左 Left', center: '置中 Center', full: '滿版 Full width' },
+  conversionWarning: (marks, types, mentions) => {
+    const names: Record<string, string> = { bold: '粗體', italic: '斜體', underline: '底線', strike: '刪除線', code: '行內程式碼', link: '連結', color: '顏色', highlight: '背景色' };
+    const zh = [marks ? `${marks} 個樣式（${types.map((t) => names[t] ?? t).join('、')}）` : '', mentions ? `${mentions} 個提及` : ''].filter(Boolean).join('與 ');
+    return [`會清除此段的 ${zh}`, mentions ? 'Marks and mentions will be removed' : 'Marks will be removed'];
+  },
+  inlineCodeHint: ['行內程式碼不可疊加其他樣式', 'Inline code excludes other marks'],
+  members: ['成員', 'Members'],
+  membersNote: '文件只存使用者 ID · Stores user ID only',
+  ruleApplied: (label) => `已轉為${label}`,
+  ruleRevert: '還原為文字',
+  shortcutsTitle: ['鍵盤快捷鍵', 'Keyboard shortcuts'],
+  shortcutsSearch: '搜尋指令… Search commands',
+  shortcutGroups: [
+    { zh: '文字樣式', en: 'Text', items: [['粗體', 'Bold', '⌘ B'], ['斜體', 'Italic', '⌘ I'], ['底線', 'Underline', '⌘ U'], ['刪除線', 'Strike', '⌘ ⇧ X'], ['行內程式碼', 'Inline code', '⌘ E'], ['連結', 'Link', '⌘ K']] },
+    { zh: '區塊', en: 'Blocks', items: [['標題 1–3', 'Heading', '⌘ ⌥ 1–3'], ['項目清單', 'Bulleted', '⌘ ⇧ 8'], ['有序清單', 'Numbered', '⌘ ⇧ 7'], ['待辦', 'To-do', '⌘ ⇧ 9'], ['縮排／凸排', 'Indent', 'Tab / ⇧ Tab']] },
+    { zh: '編輯', en: 'Editing', items: [['復原', 'Undo', '⌘ Z'], ['重做', 'Redo', '⌘ ⇧ Z'], ['斜線指令', 'Commands', '/'], ['軟換行', 'Line break', '⇧ ↵'], ['搜尋', 'Find', '⌘ F'], ['快捷鍵一覽', 'Shortcuts', '⌘ /']] },
+  ],
+  feedback: {
+    length: (n) => [`已達單一區塊上限，多出的 ${n.toLocaleString('en-US')} 字未插入`, `Block limit reached, ${n.toLocaleString('en-US')} chars not inserted`],
+    lengthAction: '貼到新段落',
+    imageSrc: ['不接受此圖片來源，只允許自家 CDN 或 https', 'Image source not allowed'],
+    imageSrcAction: '上傳圖片',
+    unsupported: (n) => [`已略過 ${n} 個嵌入內容（不在 schema 中）`, `Skipped ${n} embed${n > 1 ? 's' : ''} not in schema`],
+    unsupportedAction: '支援清單',
+    invalid: ['這個變更不符合 schema，已取消', 'Change rejected by the schema'],
+    supported: '段落、標題、清單、待辦、引言、程式碼、分隔線、圖片、表格',
+  },
+  pasteSources: {
+    html: ['已清理貼上內容', 'Pasted clean'],
+    gdocs: ['從 Google 文件貼上', 'Google Docs'],
+    word: ['從 Word 貼上', 'Word'],
+    markdown: ['偵測到 Markdown', 'Markdown'],
+    blockwell: ['已貼上', 'Pasted'],
+    text: ['已貼上純文字', 'Plain text'],
+  },
+  pasteCounts: (counts, prefix) => {
+    const names: Record<string, string> = { heading: '標題', list: '清單', table: '表格', code: '程式碼', quote: '引言', image: '圖片', divider: '分隔線' };
+    const parts = Object.entries(counts).map(([k, n]) => `${names[k] ?? k} ${n}`);
+    return parts.length ? `${prefix} ${parts.join('、')}` : '';
+  },
+  removedKinds: { font: '字型', 'line-height': '行距', mso: 'mso 樣式', comments: '註解', color: '顏色', style: 'style', class: 'class' },
+  keepSource: '保留原文',
+  insertSheet: ['插入區塊', 'Insert'],
+  search: '搜尋 Search',
+  searchPlaceholder: '搜尋文件 · Find in document',
+  swipe: '左右滑動',
+  tableBar: { addRow: '加列', addCol: '加欄', delete: '刪除', more: '更多' },
+  emptyHint: '開始寫作，或輸入 / 插入區塊',
+  onboarding: {
+    items: [['/', '插入任何區塊', 'Insert block'], ['# 空格', '標題', 'Heading'], ['- 空格', '項目清單', 'List'], ['[] 空格', '待辦', 'To-do']],
+    dismiss: '不再顯示',
+  },
+  placeholders: {
+    heading1: '標題 1 · Heading 1',
+    heading2: '標題 2 · Heading 2',
+    heading3: '標題 3 · Heading 3',
+    bullet: '清單項目 · List',
+    ordered: '清單項目 · List',
+    todo: '待辦事項 · To-do',
+    quote: '引言 · Quote',
+  },
+  copied: '已複製 Copied',
+  saveStatus: { saving: '儲存中 Saving…', saved: '已儲存 · Saved', offline: '離線 · Offline', error: '未儲存 · Not saved' },
+  saveFailed: (index, field) => [`無法儲存：第 ${index} 個區塊的${field}不合法`, `Save failed: invalid ${field === '連結網址' ? 'link' : 'content'} in block ${index}`],
+  gotoBlock: '前往區塊',
+  retry: '重試',
+  offlineBanner: ['離線中，變更保存在這台裝置，連線後自動同步', 'Changes sync on reconnect'],
+  pending: (n) => `${n} 筆變更待同步`,
+  virtualized: (n) => `${n.toLocaleString('en-US')} 個區塊 · 已啟用虛擬化`,
+  printAll: '列印時渲染全部',
+  presence: { online: (n) => [`${n} 人在線`, `${n} online`], you: '（你）', jump: '前往', follow: ['跟隨游標', 'Follow'] },
+  comments: { title: ['留言', 'Comments'], reply: '回覆… Reply', resolve: '解決 · Resolve' },
+  history: { title: ['版本紀錄', 'History'], added: '新增', removed: '刪除', restore: '還原此版本 · Restore' },
+  close: '關閉 Close',
+  tokenNames: {
+    default: '預設 default', gray: '灰色 gray', brown: '棕色 brown', red: '紅色 red', orange: '橙色 orange', yellow: '黃色 yellow',
+    green: '綠色 green', teal: '藍綠色 teal', cyan: '青色 cyan', blue: '藍色 blue', purple: '紫色 purple', pink: '粉紅色 pink',
+  },
+  announce: (what, on) => {
+    const names: Record<string, string> = { bold: '粗體', italic: '斜體', underline: '底線', strike: '刪除線', code: '行內程式碼', link: '連結', color: '文字色', highlight: '背景色' };
+    const kinds: Record<string, string> = { paragraph: '內文', heading1: '標題 1', heading2: '標題 2', heading3: '標題 3', bullet: '項目清單', ordered: '有序清單', todo: '待辦清單', quote: '引言', code: '程式碼區塊' };
+    if (kinds[what]) return `已轉為${kinds[what]}`;
+    const [type, token] = what.split(':');
+    const name = names[type!] ?? type;
+    return on ? `已套用${token ? `${token} ` : ''}${name}` : `已移除${name}`;
   },
 };
 

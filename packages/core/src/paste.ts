@@ -207,7 +207,8 @@ export function parseHtml(html: string, parser: DOMParser = new DOMParser()): Pa
     if (source === 'word' && /mso-list:\s*ignore/i.test(style)) return;
     noteAttrs(el);
     if (el.getAttribute('color') || /(^|;)\s*color\s*:/i.test(style)) {
-      removed.add('color');
+      // Google Docs colours every link; only an explicit colour elsewhere counts.
+      if (source !== 'gdocs' || !el.closest('a')) removed.add('color');
       if (source === 'html') issue('color-dropped');
     }
     if (source === 'gdocs' && /font-(family|size)/i.test(style)) removed.add('font');
@@ -380,7 +381,8 @@ export function parseHtml(html: string, parser: DOMParser = new DOMParser()): Pa
           const extra: Mark[] = [];
           if (/font-weight:\s*(bold|[6-9]00)\b/i.test(style)) extra.push({ type: 'bold', from: 0, to: 0 });
           if (/font-style:\s*italic/i.test(style)) extra.push({ type: 'italic', from: 0, to: 0 });
-          if (/text-decoration[^;]*underline/i.test(style)) extra.push({ type: 'underline', from: 0, to: 0 });
+          // Links are underlined by Google Docs itself; that is not an underline mark.
+          if (/text-decoration[^;]*underline/i.test(style) && !active.some((m) => m.type === 'link')) extra.push({ type: 'underline', from: 0, to: 0 });
           if (/text-decoration[^;]*line-through/i.test(style)) extra.push({ type: 'strike', from: 0, to: 0 });
           extra.forEach((m) => kept.add(m.type));
           kidsWith([...active, ...extra.filter((m) => !active.some((a) => a.type === m.type))]);
@@ -397,7 +399,8 @@ export function parseHtml(html: string, parser: DOMParser = new DOMParser()): Pa
   }
   report.kept = [...kept];
   report.droppedAttrs = [...dropped];
-  report.removed = [...removed];
+  const ORDER = ['font', 'line-height', 'color', 'mso', 'comments'];
+  report.removed = [...removed].sort((x, y) => ORDER.indexOf(x) - ORDER.indexOf(y));
   report.issues = [...issues].map(([code, count]) => ({ code, count }));
   const clean = sanitize(blocks);
   report.counts = countBlocks(clean);

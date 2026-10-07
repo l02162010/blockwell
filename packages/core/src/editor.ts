@@ -1023,7 +1023,7 @@ export class Editor {
     let el = this.spacers[side];
     if (!el) {
       el = document.createElement('div');
-      el.className = 'bw-spacer';
+      el.className = 'bw-virtual-spacer';
       el.setAttribute('contenteditable', 'false');
       el.setAttribute('aria-hidden', 'true');
       el.setAttribute('data-bw-spacer', side);
@@ -1395,7 +1395,7 @@ export class Editor {
     }
     const collapsed = isCollapsed(this.state.selection);
     if (!this.run((tr) => C.insertText(tr, data, this.storedMarks), { mergeable: collapsed && data.length === 1 && data !== ' ' })) return;
-    if (data === '/') this.maybeOpenTrigger();
+    if (data === '/' || data === '@') this.maybeOpenTrigger();
     const tr = this.state.tr();
     const marker = runInputRules(tr, this.commandOptions);
     if (marker) {

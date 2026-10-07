@@ -3,7 +3,7 @@ import { computed } from 'vue';
 import { keepFocus, useBlockwell } from '../composables.js';
 import BwIcon from './BwIcon.vue';
 
-const props = defineProps<{ size?: 'sm' | 'md'; source?: 'toolbar' | 'bubble' }>();
+const props = defineProps<{ size?: 'sm' | 'md'; source?: 'toolbar' | 'bubble'; disabled?: boolean }>();
 const emit = defineEmits<{ click: [e: MouseEvent] }>();
 const { active, ui, messages } = useBlockwell();
 const swatch = (token: string | null | undefined, kind: 'color' | 'bg') =>
@@ -22,6 +22,7 @@ const open = computed(() => ui.popover === 'color' && ui.source === (props.sourc
     :title="messages.color"
     aria-haspopup="dialog"
     :aria-expanded="open"
+    :disabled="props.disabled"
     @mousedown="keepFocus"
     @click="emit('click', $event)"
   >

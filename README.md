@@ -4,7 +4,7 @@ A block-based rich-text editor whose documents are structured JSON, never HTML.
 
 Blockwell is built for one goal: rich text without the XSS problems of storing and rendering HTML. Every document is checked against a whitelist schema, colors are palette tokens instead of CSS, links are scheme-checked, and renderers build output so that user content can only ever become text.
 
-> **Status: early development.** The spec and the TypeScript validator exist; the editor does not yet.
+> **Status: early development.** The spec, the TypeScript validator, the editor core and the Vue 3 adapter (UI/UX spec v0.3) work; renderers and the other-language validators are still in progress.
 
 ## What makes it different
 
@@ -43,6 +43,9 @@ Marks: bold, italic, underline, strike, inline code, link, text color, highlight
 | [`spec/`](spec/) | Schema, palette and written specification | Draft |
 | [`conformance/`](conformance/) | Shared fixtures every implementation must pass | 69 cases |
 | [`packages/schema`](packages/schema/) | `@blockwell/schema` — TypeScript reference validator and flattener | Working |
+| [`packages/core`](packages/core/) | `@blockwell/core` — model, transactions, history, `contenteditable` view, paste conversion (HTML, Google Docs, Word, Markdown), search, diff | Working |
+| [`packages/vue`](packages/vue/) | `@blockwell/vue` — `<BlockwellEditor>` and its toolbars, menus, dialogs, status and collaboration UI | Working |
+| [`apps/playground`](apps/playground/) | Demo of every v0.3 design screen, plus Playwright tests | Working |
 | [`go/`](go/) | Go module | Skeleton |
 | [`dotnet/`](dotnet/) | `Blockwell` NuGet package | Skeleton |
 | [`rust/`](rust/) | `blockwell` crate | Skeleton |
@@ -50,15 +53,18 @@ Marks: bold, italic, underline, strike, inline code, link, text color, highlight
 ## Roadmap
 
 1. **Model and schema** — spec, conformance suite, validators in all four languages.
-2. **Editor core** — operations and transactions, `beforeinput` handling, selection mapping, IME composition.
-3. **Vue adapter and renderers** — `@blockwell/vue`, HTML, email and plain-text renderers; PDF and Excel add-ons.
-4. **Migration** — convert existing HTML content to Blockwell JSON.
+2. **Editor core** — operations and transactions, `beforeinput` handling, selection mapping, IME composition. *Done.*
+3. **Vue adapter** — `@blockwell/vue`. *Done.* Presence, comments, version history and save status are UI components fed by host data; syncing them (e.g. with Yjs) is up to the host.
+4. **Renderers** — HTML, email and plain text; PDF and Excel add-ons.
+5. **Migration** — convert existing HTML content to Blockwell JSON (`convertHtml` and the review-queue UI exist).
 
 ## Development
 
 ```bash
 pnpm install
-pnpm test        # TypeScript conformance tests
+pnpm test        # TypeScript conformance and editor-core tests
+pnpm --filter ./apps/playground dev   # playground at http://localhost:5173
+pnpm --filter ./apps/playground e2e   # Playwright browser tests
 cd go && go test ./...
 cd rust && cargo test
 cd dotnet && dotnet test tests/Blockwell.Tests/Blockwell.Tests.csproj
