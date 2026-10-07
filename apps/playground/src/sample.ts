@@ -198,7 +198,7 @@ export const pasteSamples = {
   },
   word: {
     html: '<html xmlns:o="urn:schemas-microsoft-com:office:office"><body><p class=MsoNormal><b>上線檢查</b><o:p></o:p></p><p class=MsoListParagraphCxSpFirst style="mso-list:l0 level1 lfo1"><span style="mso-list:Ignore">1.<span>  </span></span>iOS Safari 注音</p><p class=MsoListParagraphCxSpMiddle style="mso-list:l0 level1 lfo1"><span style="mso-list:Ignore">2.<span>  </span></span>iOS 手寫輸入</p><p class=MsoListParagraphCxSpLast style="mso-list:l0 level2 lfo1"><span style="mso-list:Ignore">o<span> </span></span>Gboard 注音</p><table class=MsoTableGrid><tr><td>平台</td><td>狀態</td></tr><tr><td>iOS</td><td>進行中</td></tr></table><!--[if gte mso 9]><xml></xml><![endif]--></body></html>',
-    text: '上線檢查\n1. iOS Safari 注音\n2. iOS 手寫輸入',
+    text: '上線檢查\n1. iOS Safari 注音\n2. iOS 手寫輸入\n    o Gboard 注音\n平台\t狀態\niOS\t進行中',
   },
   markdown: {
     html: '',

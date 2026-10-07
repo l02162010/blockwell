@@ -2055,9 +2055,11 @@ button.bw-code-lang:hover {
   flex: 1;
   min-width: 0;
 }
-.bw-feedback-text .bw-en {
-  opacity: 0.9;
-  font-size: 1em;
+.bw-feedback-text .bw-en,
+.bw-feedback .bw-en {
+  /* Small text on a tinted background: keep full contrast. */
+  opacity: 1;
+  font-size: max(0.9em, 12px);
 }
 .bw-feedback-list {
   display: block;
@@ -2247,6 +2249,19 @@ button.bw-code-lang:hover {
   align-items: center;
   gap: 10px;
   font-size: 13.5px;
+  /* Each tip is a button that does what it says. */
+  margin: 0 -8px;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: inherit;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.bw-onboarding-row:hover {
+  background: var(--bw-hover);
 }
 .bw-onboarding-row .bw-en {
   color: var(--bw-muted);
@@ -2380,10 +2395,11 @@ button.bw-code-lang:hover {
   padding: 5px 10px;
 }
 .bw-error-block {
-  border-radius: 6px;
+  /* Tinted padding around the text, then the red ring: the outline never touches the letters. */
+  border-radius: 4px;
   box-shadow:
-    0 0 0 1.5px oklch(0.6 0.17 27),
-    0 0 0 5px oklch(0.96 0.025 27);
+    0 0 0 6px oklch(0.985 0.008 27),
+    0 0 0 7.5px oklch(0.6 0.17 27);
   background: oklch(0.985 0.008 27);
 }
 .bw-save {
@@ -2831,6 +2847,11 @@ button.bw-code-lang:hover {
 }
 .bw-narrow .bw-table td {
   white-space: nowrap;
+  min-width: 72px;
+}
+/* Phones edit tables from the bar above the keyboard, not the desktop + strips. */
+.bw-narrow .bw-table-add {
+  display: none;
 }
 .bw-narrow .bw-table td:first-child {
   position: sticky;
@@ -2853,4 +2874,31 @@ button.bw-code-lang:hover {
 /* Horizontal scrolling shows itself with a fade on the right edge instead of an icon. */
 .bw-narrow .bw-table-scroll {
   mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
+}
+
+/* Dark mode: floating surfaces need an edge to stand apart from the page. */
+[data-theme='dark'] :is(.bw-popover, .bw-bubble, .bw-toast, .bw-feedback-float) {
+  box-shadow:
+    0 0 0 1px var(--bw-line-strong),
+    0 14px 36px -10px rgba(0, 0, 0, 0.6);
+}
+
+/* Floating controls are not text: dragging across them must not select their labels. */
+:is(.bw-bubble, .bw-popover, .bw-sheet, .bw-toolbar, .bw-handles, .bw-image-bar) {
+  user-select: none;
+  -webkit-user-select: none;
+}
+:is(.bw-popover, .bw-sheet) :is(input, textarea) {
+  user-select: text;
+  -webkit-user-select: text;
+}
+/* A text selection that cannot be mistaken for the pale blue highlight mark. */
+.bw-editor ::selection {
+  background: color-mix(in oklch, var(--bw-accent) 30%, transparent);
+}
+[data-theme='dark'] .bw-error-block {
+  background: oklch(0.29 0.04 27);
+  box-shadow:
+    0 0 0 6px oklch(0.29 0.04 27),
+    0 0 0 7.5px oklch(0.66 0.16 27);
 }

@@ -882,6 +882,27 @@ export function insertFragment(tr: Tr, blocks: Block[], o: CommandOptions): bool
   // Split off the tail of the current block.
   const len = textLength(cur);
   const tail = contentOf(cur, pos.offset, len);
+  // Pasted structure (a heading, a list, code) starts its own block rather than melting into the
+  // line the caret is on; plain paragraphs, or more of the same kind, continue that line.
+  const merge = isText(first) && (textLength(cur) === 0 || first.type === 'paragraph' || first.type === cur.type);
+  if (!merge) {
+    tr.deleteText(cur.id, pos.offset, len);
+    let at = pos.offset === 0 && len > 0 ? loc.index : loc.index + 1;
+    if (pos.offset === 0 && len > 0) tr.insertText({ block: cur.id, offset: 0 }, tail.text, tail.marks, tail.entities);
+    let lastId: string | null = null;
+    for (const b of prepared) {
+      tr.insertBlock(loc.parent, at++, b);
+      lastId = b.id;
+    }
+    if (pos.offset > 0 && pos.offset < len) {
+      const c = adaptContent(tail, cur.type);
+      tr.insertBlock(loc.parent, at, { id: newId(), type: cur.type, attrs: attrsForSplit(cur), text: c.text, marks: c.marks, entities: c.entities });
+    }
+    const lastBlock = lastId ? tr.block(lastId) : null;
+    if (lastBlock && isText(lastBlock)) tr.setSelection(caret(lastBlock.id, textLength(lastBlock)));
+    else if (lastBlock) tr.setSelection({ type: 'node', block: lastBlock.id });
+    return true;
+  }
   tr.deleteText(cur.id, pos.offset, len);
   let rest = prepared;
   let index = loc.index + 1;

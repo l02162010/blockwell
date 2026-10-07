@@ -97,6 +97,8 @@ const emit = defineEmits<{
   'comment-open': [block: string];
   mention: [];
   retry: [];
+  /** The first-run tips were hidden; set `onboarding` to false from now on to remember it. */
+  'onboarding-dismiss': [];
 }>();
 
 const messages: Messages = { ...defaultMessages, ...props.messages };
@@ -107,7 +109,8 @@ const editor = shallowRef(
       ...(props.modelValue ? { doc: props.modelValue } : {}),
       editable: props.editable,
       ...(allowed ? { allowedBlocks: allowed } : {}),
-      placeholder: props.placeholder ?? (props.variant === 'page' ? messages.placeholder : ''),
+      // A custom placeholder is for the empty document; empty lines keep the "type /" hint.
+      placeholder: props.variant === 'page' ? messages.placeholder : '',
       emptyPlaceholder: props.placeholder ?? (props.variant === 'comment' ? messages.reply : props.variant === 'page' ? messages.emptyHint : messages.placeholder),
       placeholders: messages.placeholders,
       copiedLabel: messages.copied,
@@ -315,7 +318,7 @@ defineExpose({ editor, submit });
           <Skeleton v-if="loading" />
           <DiffView v-else-if="diffBase" :base="diffBase" :current="editor.getJSON()" :mention-label="mentionLabel" />
           <EditorContent v-show="!loading && !diffBase" :editor="editor" class="bw-content" />
-          <EmptyState v-if="isPage && editable && onboarding && isEmpty && !loading && !diffBase" />
+          <EmptyState v-if="isPage && editable && onboarding && isEmpty && !loading && !diffBase" @dismiss="emit('onboarding-dismiss')" />
           <slot name="after" />
         </div>
       </div>

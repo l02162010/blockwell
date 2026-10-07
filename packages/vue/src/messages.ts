@@ -252,8 +252,9 @@ export const defaultMessages: Messages = {
     text: ['已貼上純文字', 'Plain text'],
   },
   pasteCounts: (counts, prefix) => {
-    const names: Record<string, string> = { heading: '標題', list: '清單', table: '表格', code: '程式碼', quote: '引言', image: '圖片', divider: '分隔線' };
-    const parts = Object.entries(counts).map(([k, n]) => `${names[k] ?? k} ${n}`);
+    // "1 個標題", not "標題 1", which reads like "Heading 1".
+    const names: Record<string, string> = { heading: '個標題', list: '個清單項目', table: '個表格', code: '段程式碼', quote: '段引言', image: '張圖片', divider: '條分隔線' };
+    const parts = Object.entries(counts).map(([k, n]) => `${n} ${names[k] ?? k}`);
     return parts.length ? `${prefix} ${parts.join('、')}` : '';
   },
   removedKinds: { font: '字型', 'line-height': '行距', mso: 'mso 樣式', comments: '註解', color: '顏色', style: 'style', class: 'class' },
@@ -262,11 +263,11 @@ export const defaultMessages: Messages = {
   search: '搜尋 Search',
   searchPlaceholder: '搜尋文件 · Find in document',
   swipe: '左右滑動',
-  tableBar: { addRow: '加列', addCol: '加欄', delete: '刪除', more: '更多' },
+  tableBar: { addRow: '加列', addCol: '加欄', delete: '刪除列', more: '更多' },
   emptyHint: '開始寫作，或輸入 / 插入區塊',
   onboarding: {
     items: [['/', '插入任何區塊', 'Insert block'], ['# 空格', '標題', 'Heading'], ['- 空格', '項目清單', 'List'], ['[] 空格', '待辦', 'To-do']],
-    dismiss: '不再顯示',
+    dismiss: '隱藏提示 Hide tips',
   },
   placeholders: {
     heading1: '標題 1 · Heading 1',

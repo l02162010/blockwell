@@ -325,6 +325,19 @@ export class Editor {
     return !!this.dom && this.dom.ownerDocument.activeElement === this.dom;
   }
 
+  /** Scrolls the editor (or the page) just enough to show the caret. */
+  scrollCaretIntoView() {
+    const r = this.selectionRect();
+    if (!r || !this.dom) return;
+    const sp = this.scrollParent();
+    const v = sp ? sp.getBoundingClientRect() : new DOMRect(0, 0, window.innerWidth, window.innerHeight);
+    const margin = 48;
+    const dy = r.bottom > v.bottom - margin ? r.bottom - v.bottom + margin : r.top < v.top + margin ? r.top - v.top - margin : 0;
+    if (!dy) return;
+    if (sp) sp.scrollTop += dy;
+    else window.scrollBy(0, dy);
+  }
+
   /** Bounding rectangle of the current selection, for positioning floating UI. */
   selectionRect(): DOMRect | null {
     if (!this.dom) return null;
@@ -2177,6 +2190,13 @@ export class Editor {
       this.run((tr) => C.insertText(tr, plain.replace(/\r\n?/g, '\n'), null), { seal: true });
       return;
     }
+    // A URL pasted over selected words links them instead of replacing them.
+    const sel0 = this.state.selection;
+    const url = plain.trim();
+    if (sel0?.type === 'text' && !isCollapsed(sel0) && sel0.anchor.block === sel0.focus.block && !/\s/.test(url) && isSafeUrl(url, C.LINK_SCHEMES)) {
+      this.setLink(url);
+      return;
+    }
     const own = data.getData(CLIPBOARD_MIME);
     let parsed = own ? parseBlockwell(own) : null;
     const html = data.getData('text/html');
@@ -2195,11 +2215,14 @@ export class Editor {
     this.lastPastePlain = plain;
     const noteworthy =
       r.source === 'gdocs' || r.source === 'word' || r.source === 'markdown' || (r.source === 'html' && (r.droppedAttrs.length > 0 || r.unknownElements > 0 || r.unsafeUrls > 0));
-    if (noteworthy) this.emit('paste', { report: r });
+    const imageRejected = r.issues.some((i) => i.code === 'unsafe-image');
+    // A rejected image gets its own note (with an upload button); no second message for it.
+    const onlyImage = r.source === 'html' && imageRejected && r.droppedAttrs.length === 0 && r.unknownElements === 0;
+    if (noteworthy && !onlyImage) this.emit('paste', { report: r });
     const sel = this.state.selection;
     const block = sel?.type === 'text' ? sel.focus.block : undefined;
     if (r.skipped) this.emit('feedback', { level: 'skip', code: 'unsupported', count: r.skipped, block });
-    if (r.issues.some((i) => i.code === 'unsafe-image')) this.emit('feedback', { level: 'reject', code: 'image-src', block });
+    if (imageRejected) this.emit('feedback', { level: 'reject', code: 'image-src', block });
   }
 
   private onDrop(e: DragEvent) {

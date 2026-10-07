@@ -46,6 +46,17 @@ const presence = computed<Person[]>(() => [
   { id: 'u_chen', name: '陳柏翰', color: 'teal', location: '引言區塊 · Quote' },
   { id: 'u_mia', name: 'Mia', color: 'orange', location: '選取表格 · Table' },
 ]);
+// 分享 copies a link; 跟隨 keeps 陳柏翰's caret in view (here: jumps to it when turned on).
+const shared = ref(false);
+const share = () => {
+  void navigator.clipboard?.writeText(location.href).catch(() => {});
+  shared.value = true;
+  setTimeout(() => (shared.value = false), 1800);
+};
+watch(follow, (on) => {
+  const chen = presence.value.find((p) => p.id === 'u_chen');
+  if (on && chen) jump(chen);
+});
 const jump = (p: Person) => {
   const id = p.id === 'u_chen' ? quote.value?.id : ime.value?.id;
   if (id) editor.value?.revealBlock(id, { select: true });
@@ -185,7 +196,7 @@ const status = computed(() => (system.value === 'error' ? 'error' : system.value
         <SaveStatus v-if="!readOnly" :status="status" />
         <div v-else class="badge"><span class="material-symbols-rounded">lock</span>唯讀 Read-only</div>
         <PresenceMenu v-model:follow="follow" :people="presence" @jump="jump" />
-        <button type="button" class="share">分享</button>
+        <button type="button" class="share" @click="share">{{ shared ? '已複製連結' : '分享' }}</button>
       </div>
       <BlockwellEditor
         v-model="doc"

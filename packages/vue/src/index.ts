@@ -25,7 +25,7 @@ export { default as DiffView } from './components/DiffView.vue';
 export { default as FeedbackNote } from './components/FeedbackNote.vue';
 export { default as ShortcutsDialog } from './components/ShortcutsDialog.vue';
 export { default as SearchBar } from './components/SearchBar.vue';
-export { useEditor, useEditorState, provideBlockwell, useBlockwell } from './composables.js';
+export { useEditor, useEditorState, provideBlockwell, useBlockwell, isMac, kbd } from './composables.js';
 export type { BlockwellContext, PopoverKind, UiState } from './composables.js';
 export { defaultMessages, slashItems } from './messages.js';
 export type { Messages, SlashItem } from './messages.js';

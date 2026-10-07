@@ -131,6 +131,19 @@ const run = (fn: (id: string) => void) => {
         <button type="button" role="menuitem" class="bw-menu-item bw-danger" @mousedown="keepFocus" @click="run((id) => ed().deleteRow(id))">
           <BwIcon name="delete" :size="17" />{{ m.tableRow.delete[0] }}<span class="bw-menu-en">{{ m.tableRow.delete[1] }}</span>
         </button>
+        <!-- On a phone the bar's 更多 holds the column actions too (there are no column handles). -->
+        <template v-if="ctx.narrow.value">
+          <div class="bw-menu-sep" />
+          <button type="button" role="menuitem" class="bw-menu-item" @mousedown="keepFocus" @click="run((id) => ed().addColumn(id, 'before'))">
+            <BwIcon name="west" :size="17" class="bw-muted" />{{ m.tableCol.left[0] }}<span class="bw-menu-en">{{ m.tableCol.left[1] }}</span>
+          </button>
+          <button type="button" role="menuitem" class="bw-menu-item" @mousedown="keepFocus" @click="run((id) => ed().addColumn(id, 'after'))">
+            <BwIcon name="east" :size="17" class="bw-muted" />{{ m.tableCol.right[0] }}<span class="bw-menu-en">{{ m.tableCol.right[1] }}</span>
+          </button>
+          <button type="button" role="menuitem" class="bw-menu-item bw-danger" @mousedown="keepFocus" @click="run((id) => ed().deleteColumn(id))">
+            <BwIcon name="delete" :size="17" />{{ m.tableCol.delete[0] }}<span class="bw-menu-en">{{ m.tableCol.delete[1] }}</span>
+          </button>
+        </template>
       </div>
     </Popover>
   </template>

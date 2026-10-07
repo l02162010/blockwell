@@ -13,8 +13,28 @@ import Notes from './sections/Notes.vue';
 import Palette from './sections/Palette.vue';
 import PasteDemo from './sections/PasteDemo.vue';
 
-const theme = ref<'light' | 'dark'>('light');
-watch(theme, (t) => document.documentElement.setAttribute('data-theme', t), { immediate: true });
+// Follows the system setting until you pick one; your pick is remembered.
+const stored = (() => {
+  try {
+    return localStorage.getItem('bw-theme');
+  } catch {
+    return null;
+  }
+})();
+const theme = ref<'light' | 'dark'>(stored === 'dark' || (stored !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light');
+watch(
+  theme,
+  (t, old) => {
+    document.documentElement.setAttribute('data-theme', t);
+    if (old === undefined) return;
+    try {
+      localStorage.setItem('bw-theme', t);
+    } catch {
+      /* storage blocked: this visit only */
+    }
+  },
+  { immediate: true },
+);
 
 /** Pretends to upload: reports progress, then resolves to an https URL. */
 const uploadImage = (file: File, onProgress: (f: number) => void): Promise<UploadResult> =>

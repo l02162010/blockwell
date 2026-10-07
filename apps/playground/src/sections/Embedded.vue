@@ -3,17 +3,19 @@ import { textBlocks, type Doc, type UploadResult } from '@blockwell/core';
 import { BlockwellEditor } from '@blockwell/vue';
 import { ref, shallowRef } from 'vue';
 import { cmsDoc, mobileDoc } from '../sample';
+import DocView from './DocView.vue';
+import PhoneFrame from './PhoneFrame.vue';
 import SectionHead from './SectionHead.vue';
 
 defineProps<{ uploadImage: (f: File, p: (n: number) => void) => Promise<UploadResult> }>();
 const cms = cmsDoc();
-const mobile = mobileDoc();
 const comment = shallowRef<Doc | undefined>(undefined);
-const sent = ref<string[]>([]);
+const sent = ref<Doc[]>([]);
 const onSubmit = (d: Doc) => {
   const text = textBlocks(d).map((b) => b.text).join('\n').trim();
   if (!text) return;
-  sent.value = [...sent.value, text];
+  // The sent message keeps its formatting: it is the same JSON, shown read-only.
+  sent.value = [...sent.value, d];
   comment.value = { version: 1, blocks: [{ id: `c_${Date.now()}`, type: 'paragraph', text: '' }] };
 };
 </script>
@@ -28,7 +30,7 @@ const onSubmit = (d: Doc) => {
         <div class="field-group">
           <div class="field-name">內容 Content</div>
           <BlockwellEditor variant="field" :model-value="cms" :max-length="20000" :upload-image="uploadImage" />
-          <div class="note">支援 Markdown 快捷輸入；顏色僅限色盤。</div>
+          <div class="note">支援 Markdown 快捷輸入：# 標題、- 清單、**粗體**、`程式碼`。</div>
         </div>
       </div>
 
@@ -45,7 +47,7 @@ const onSubmit = (d: Doc) => {
           <div class="avatar" style="background: #dbeafe; color: #1e3a8a">林</div>
           <div class="msg-body">
             <div class="msg-head"><b>林雅婷</b> <span>· 剛剛</span></div>
-            <div>{{ s }}</div>
+            <DocView :doc="s" />
           </div>
         </div>
         <div class="msg">
@@ -57,15 +59,7 @@ const onSubmit = (d: Doc) => {
 
       <div class="phone-col">
         <div class="card-label">行動裝置 · Mobile</div>
-        <div class="phone">
-          <div class="phone-status" />
-          <div class="phone-nav">
-            <span class="material-symbols-rounded">chevron_left</span>
-            <span class="phone-actions"><span class="material-symbols-rounded">undo</span><b>完成</b></span>
-          </div>
-          <BlockwellEditor class="phone-editor" layout="mobile" :model-value="mobile" :upload-image="uploadImage" />
-          <div class="keyboard">系統鍵盤 · system keyboard</div>
-        </div>
+        <PhoneFrame :doc="mobileDoc" :upload-image="uploadImage" />
         <div class="note">窄螢幕把頂部列與浮動列合併成鍵盤上方的工具列，按鈕 44px。</div>
       </div>
     </div>

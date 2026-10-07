@@ -1,34 +1,36 @@
 <script setup lang="ts">
+import type { BlockKind } from '@blockwell/core';
 import { ref } from 'vue';
 import { useBlockwell } from '../composables.js';
 
-/** First-run guide for an empty document; hides once typing starts, or for good with "不再顯示". */
+/**
+ * First-run tips for an empty document. Each tip does what it describes when clicked; they hide
+ * once typing starts, or with the hide button (the host can remember that via `onboarding`).
+ */
+const emit = defineEmits<{ dismiss: [] }>();
 const ctx = useBlockwell();
 const m = ctx.messages;
-const KEY = 'bw-onboarding-dismissed';
-const dismissed = ref(read());
-function read() {
-  try {
-    return localStorage.getItem(KEY) === '1';
-  } catch {
-    return false;
-  }
-}
+const hidden = ref(false);
+const KINDS: Record<string, BlockKind> = { '#': 'heading1', '-': 'bullet', '[]': 'todo' };
+const run = (key: string) => {
+  const ed = ctx.editor.value;
+  ed.focus();
+  const marker = key.split(' ')[0]!;
+  if (marker === '/') ed.startSlash();
+  else if (KINDS[marker]) ed.setBlockKind(KINDS[marker]!);
+};
 const dismiss = () => {
-  dismissed.value = true;
-  try {
-    localStorage.setItem(KEY, '1');
-  } catch {
-    /* storage unavailable: hide for this session only */
-  }
+  hidden.value = true;
+  emit('dismiss');
+  ctx.editor.value.focus();
 };
 </script>
 
 <template>
-  <div v-if="!dismissed" class="bw-onboarding" aria-label="Tips">
-    <div v-for="[key, zh, en] in m.onboarding.items" :key="key" class="bw-onboarding-row">
+  <div v-if="!hidden" class="bw-onboarding" aria-label="Tips">
+    <button v-for="[key, zh, en] in m.onboarding.items" :key="key" type="button" class="bw-onboarding-row" @mousedown.prevent @click="run(key)">
       <kbd>{{ key }}</kbd><span>{{ zh }} <span class="bw-en">{{ en }}</span></span>
-    </div>
-    <button type="button" class="bw-onboarding-dismiss" @click="dismiss">{{ m.onboarding.dismiss }}</button>
+    </button>
+    <button type="button" class="bw-onboarding-dismiss" @mousedown.prevent @click="dismiss">{{ m.onboarding.dismiss }}</button>
   </div>
 </template>

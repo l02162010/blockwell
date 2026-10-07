@@ -138,6 +138,8 @@ export interface FloatingOptions {
   /** Horizontal alignment against the anchor. */
   align?: 'start' | 'center';
   offset?: number;
+  /** The area the element should stay inside (e.g. the editor's scroll area, below its toolbar). */
+  bounds?: () => DOMRect | null;
 }
 
 /**
@@ -166,9 +168,10 @@ export function useFloating(
     const gap = opts.offset ?? 8;
     const vw = window.innerWidth, vh = window.visualViewport?.height ?? window.innerHeight;
     // Pick a side once and keep it, so a menu that shrinks as you filter it stays against its anchor.
+    const minTop = Math.max(8, (opts.bounds?.()?.top ?? 0) + 4);
     if (!side) {
       side = opts.placement === 'top' ? 'top' : 'bottom';
-      if (side === 'top' && r.top - h - gap < 8) side = 'bottom';
+      if (side === 'top' && r.top - h - gap < minTop) side = 'bottom';
       else if (side === 'bottom' && r.bottom + gap + h > vh - 8 && r.top - h - gap > 8) side = 'top';
     }
     const top = side === 'top' ? r.top - h - gap : r.bottom + gap;

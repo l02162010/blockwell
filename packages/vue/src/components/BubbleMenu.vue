@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import { useBlockwell, useFloating, type PopoverKind } from '../composables.js';
+import { useBlockwell, useFloating, visibleRect, type PopoverKind } from '../composables.js';
 import BlockKindButton from './BlockKindButton.vue';
 import ColorButton from './ColorButton.vue';
 import ToolButton from './ToolButton.vue';
@@ -23,7 +23,14 @@ const visible = computed(() => {
 });
 
 const el = ref<HTMLElement | null>(null);
-const { style } = useFloating(el, () => ed().selectionBounds(), () => [ctx.version.value, visible.value], { placement: 'top', offset: 10 });
+/** The selection, as long as it is inside the editor's visible area (not scrolled away or under the toolbar). */
+const anchor = () => {
+  const r = ed().selectionBounds();
+  const clip = visibleRect(ed());
+  if (!r || !clip || r.bottom < clip.top || r.top > clip.bottom) return null;
+  return r;
+};
+const { style } = useFloating(el, anchor, () => [ctx.version.value, visible.value], { placement: 'top', offset: 10, bounds: () => visibleRect(ed()) });
 const openFrom = (kind: Exclude<PopoverKind, null>, e: MouseEvent) => {
   const target = e.currentTarget as HTMLElement;
   ctx.toggle(kind, () => (target.isConnected ? target.getBoundingClientRect() : null), { source: 'bubble' });
@@ -31,7 +38,7 @@ const openFrom = (kind: Exclude<PopoverKind, null>, e: MouseEvent) => {
 </script>
 
 <template>
-  <div v-show="visible" ref="el" class="bw-bubble" :style="style" role="toolbar" :aria-label="m.bold">
+  <div v-show="visible" ref="el" class="bw-bubble" :style="style" role="toolbar" :aria-label="m.toolbar">
     <BlockKindButton size="sm" source="bubble" :show-english="false" @click="openFrom('block', $event)" />
     <span class="bw-sep" />
     <ToolButton size="sm" icon="format_bold" :icon-size="19" :label="m.bold" :active="a?.marks.bold" :disabled="inCode" @click="ed().toggleMark('bold')" />

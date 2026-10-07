@@ -12,9 +12,9 @@ const doc: Doc = {
       type: 'paragraph',
       text: '深色模式下，紅色文字改用較亮的 #F87171，黃色背景改用 #423A0F，同一個 token 在兩種主題都維持可讀。',
       marks: [
-        { type: 'bold', from: 5, to: 9 },
-        { type: 'color', from: 5, to: 9, attrs: { value: 'red' } },
-        { type: 'highlight', from: 23, to: 27, attrs: { value: 'yellow' } },
+        { type: 'bold', from: 6, to: 10 },
+        { type: 'color', from: 6, to: 10, attrs: { value: 'red' } },
+        { type: 'highlight', from: 24, to: 28, attrs: { value: 'yellow' } },
       ],
     },
     { id: 'd2', type: 'listItem', attrs: { style: 'todo', checked: true }, text: '定義深色 CSS 變數' },

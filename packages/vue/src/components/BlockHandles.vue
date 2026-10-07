@@ -161,8 +161,8 @@ const startDrag = (e: PointerEvent) => {
 
 <template>
   <div v-if="hovered && ed().isEditable" class="bw-handles" :style="{ top: `${hovered.top}px`, left: `${hovered.left}px` }">
-    <button type="button" class="bw-handle" :aria-label="m.addBlock" :title="m.addBlock" @mousedown.prevent @click="add"><BwIcon name="add" :size="18" /></button>
-    <button type="button" class="bw-handle bw-grab" :aria-label="m.dragBlock" :title="m.dragBlock" aria-haspopup="menu" :aria-expanded="ctx.ui.popover === 'blockActions'" @pointerdown="startDrag" @keydown.enter.prevent="openMenu" @keydown.space.prevent="openMenu"><BwIcon name="drag_indicator" :size="18" /></button>
+    <button type="button" class="bw-handle" tabindex="-1" :aria-label="m.addBlock" :title="m.addBlock" @mousedown.prevent @click="add"><BwIcon name="add" :size="18" /></button>
+    <button type="button" class="bw-handle bw-grab" tabindex="-1" :aria-label="m.dragBlock" :title="m.dragBlock" aria-haspopup="menu" :aria-expanded="ctx.ui.popover === 'blockActions'" @pointerdown="startDrag" @keydown.enter.prevent="openMenu" @keydown.space.prevent="openMenu"><BwIcon name="drag_indicator" :size="18" /></button>
   </div>
   <div v-if="drop" class="bw-drop-line" :style="{ top: `${drop.top}px`, left: `${drop.left}px`, width: `${drop.width}px` }" />
   <div v-if="ghost" class="bw-drag-ghost" :style="{ top: `${ghost.y}px`, left: `${ghost.x}px` }" aria-hidden="true">

@@ -16,7 +16,7 @@ const tokens = Object.entries(PALETTE_COLORS);
           <div class="sample" data-theme="light">文字 Aa</div>
           <div class="sample sample-dark" data-theme="dark">文字 Aa</div>
         </div>
-        <div class="meta"><b>default</b><span>正文色 / 無</span><span>正文色 / 無</span></div>
+        <div class="meta"><b>default</b><span>沿用正文色，不加背景</span></div>
       </div>
       <div v-for="[k, v] in tokens" :key="k" class="swatch">
         <div class="pair">
