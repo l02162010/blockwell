@@ -12,3 +12,7 @@ bin/
 obj/
 *.user
 .vs/
+
+# Playwright
+test-results/
+playwright-report/

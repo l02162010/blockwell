@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["node", "vite/client"],
+    "jsx": "preserve",
+    "exactOptionalPropertyTypes": false,
+    "paths": {
+      "@blockwell/schema": ["../schema/src/index.ts"],
+      "@blockwell/core": ["../core/src/index.ts"]
+    }
+  },
+  "include": ["src", "vite.config.ts", "vite.palette.ts"]
+}
