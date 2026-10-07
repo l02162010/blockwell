@@ -54,23 +54,23 @@ export const INPUT_RULES: Rule[] = [
 
 /**
  * Runs after text was typed. When the paragraph's text before the caret matches a rule, the typed
- * marker is removed and the rule applied. Returns true when a rule fired; on false the caller
- * must discard `tr`.
+ * marker is removed and the rule applied. Returns the marker (`## `) when a rule fired; on null
+ * the caller must discard `tr`.
  */
-export function runInputRules(tr: Tr, o: CommandOptions): boolean {
+export function runInputRules(tr: Tr, o: CommandOptions): string | null {
   const sel = tr.selection;
-  if (!sel || sel.type !== 'text' || !isCollapsed(sel)) return false;
+  if (!sel || sel.type !== 'text' || !isCollapsed(sel)) return null;
   const b = tr.block(sel.focus.block);
-  if (b.type !== 'paragraph') return false;
+  if (b.type !== 'paragraph') return null;
   const loc = mustLocate(tr.doc, b.id);
-  if (loc.parent !== null && tr.block(loc.parent).type !== 'quote') return false;
+  if (loc.parent !== null && tr.block(loc.parent).type !== 'quote') return null;
   const before = (b.text ?? '').slice(0, sel.focus.offset);
   for (const rule of INPUT_RULES) {
     const m = before.match(rule.match);
     if (!m) continue;
     tr.deleteText(b.id, 0, before.length);
     tr.setSelection(caret(b.id, 0));
-    if (rule.run(tr, o, m)) return true;
+    return rule.run(tr, o, m) ? m[0] : null;
   }
-  return false;
+  return null;
 }

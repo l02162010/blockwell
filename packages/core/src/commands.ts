@@ -153,6 +153,55 @@ function removeNode(tr: Tr, id: string): boolean {
   return true;
 }
 
+
+/**
+ * Cuts content that would push a block past `limits.maxTextLength`. The cut-off text is kept on
+ * `tr.dropped` so the editor can tell the user and offer to put it in a new paragraph.
+ */
+function clampContent(tr: Tr, b: Block, c: Content): Content {
+  const room = spec.limits.maxTextLength - textLength(b);
+  if (c.text.length <= room) return c;
+  let at = Math.max(0, room);
+  if (at > 0 && at < c.text.length && isLowSurrogate(c.text.charCodeAt(at))) at--;
+  const rest = c.text.slice(at).replace(/\uFFFC/g, '');
+  tr.dropped = { block: b.id, text: (tr.dropped?.block === b.id ? tr.dropped.text : '') + rest };
+  return {
+    text: c.text.slice(0, at),
+    marks: sliceMarks(c.marks, 0, at),
+    entities: c.entities.filter((e) => e.at < at),
+  };
+}
+
+const isLowSurrogate = (c: number) => c >= 0xdc00 && c <= 0xdfff;
+
+/** Splits text into paragraphs no longer than the block limit. */
+export function overflowToBlocks(text: string): Block[] {
+  const max = spec.limits.maxTextLength;
+  const out: Block[] = [];
+  for (const line of textToBlocks(text)) {
+    const t = line.text ?? '';
+    for (let i = 0; i < Math.max(1, t.length); i += max) out.push({ id: newId(), type: 'paragraph', text: t.slice(i, i + max) });
+  }
+  return out;
+}
+
+/** What converting the selection to `kind` would remove: only code blocks drop marks and mentions. */
+export function conversionLoss(tr: Tr, kind: BlockKind): { marks: number; types: string[]; mentions: number } {
+  const out = { marks: 0, types: [] as string[], mentions: 0 };
+  if (kind !== 'code') return out;
+  const types = new Set<string>();
+  for (const { block } of segments(tr)) {
+    if (block.type === 'code') continue;
+    for (const m of block.marks ?? []) {
+      out.marks++;
+      types.add(m.type);
+    }
+    out.mentions += (block.entities ?? []).filter((e) => e.type === 'mention').length;
+  }
+  out.types = [...types];
+  return out;
+}
+
 /** Inserts text at the selection, replacing any selected content. */
 export function insertText(tr: Tr, text: string, stored: Mark[] | null): boolean {
   if (!tr.selection) return false;
@@ -163,7 +212,7 @@ export function insertText(tr: Tr, text: string, stored: Mark[] | null): boolean
   const pos = sel.focus;
   const b = tr.block(pos.block);
   const def = spec.blocks[b.type]!;
-  const c = adaptContent({ text, marks: [], entities: [] }, b.type);
+  const c = clampContent(tr, b, adaptContent({ text, marks: [], entities: [] }, b.type));
   let marks: Mark[] = [];
   if (def.marks !== undefined && (def.marks === '*' || def.marks.length > 0) && c.text) {
     const active = stored ?? marksAt(b.marks ?? [], pos.offset);
@@ -722,6 +771,14 @@ export function insertFragment(tr: Tr, blocks: Block[], o: CommandOptions): bool
     }
   }
   if (prepared.length === 0) return false;
+  for (const b of prepared) {
+    const len = textLength(b);
+    if (!isText(b) || len <= spec.limits.maxTextLength) continue;
+    const cut = clampContent(tr, { ...b, text: '' }, contentOf(b));
+    b.text = cut.text;
+    b.marks = cut.marks;
+    b.entities = cut.entities;
+  }
 
   const first = prepared[0]!;
   // An empty paragraph takes the type of the first pasted block (a heading stays a heading).
@@ -731,7 +788,7 @@ export function insertFragment(tr: Tr, blocks: Block[], o: CommandOptions): bool
   }
   const target = tr.block(cur.id);
   if (prepared.length === 1 && isText(first)) {
-    const c = adaptContent(contentOf(first), target.type);
+    const c = clampContent(tr, target, adaptContent(contentOf(first), target.type));
     tr.insertText(pos, c.text, c.marks, c.entities);
     tr.setSelection(caret(cur.id, pos.offset + c.text.length));
     return true;
@@ -744,7 +801,7 @@ export function insertFragment(tr: Tr, blocks: Block[], o: CommandOptions): bool
   let rest = prepared;
   let index = loc.index + 1;
   if (isText(first)) {
-    const c = adaptContent(contentOf(first), target.type);
+    const c = clampContent(tr, tr.block(cur.id), adaptContent(contentOf(first), target.type));
     tr.insertText({ block: cur.id, offset: pos.offset }, c.text, c.marks, c.entities);
     rest = prepared.slice(1);
   }

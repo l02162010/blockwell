@@ -65,6 +65,17 @@
       "doc": { "version": 1, "blocks": [ { "id": "i", "type": "image", "attrs": { "src": "https://a.example/x.png", "width": 4 } } ] },
       "valid": false,
       "errors": ["invalid_attr"]
+    },
+    {
+      "name": "image alignment",
+      "doc": { "version": 1, "blocks": [ { "id": "i", "type": "image", "attrs": { "src": "https://a.example/x.png", "align": "full" } } ] },
+      "valid": true
+    },
+    {
+      "name": "image alignment must be left, center or full",
+      "doc": { "version": 1, "blocks": [ { "id": "i", "type": "image", "attrs": { "src": "https://a.example/x.png", "align": "right" } } ] },
+      "valid": false,
+      "errors": ["invalid_attr"]
     }
   ]
 }

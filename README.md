@@ -34,14 +34,14 @@ Blockwell is built for one goal: rich text without the XSS problems of storing a
 ```
 
 Blocks: paragraph, heading (1–3), list item (bullet, ordered, to-do; flat with `indent`), quote, code, divider, image, table.
-Marks: bold, italic, underline, strike, inline code, link, text color, highlight — colors from a 10-color palette.
+Marks: bold, italic, underline, strike, inline code, link, text color, highlight — colors from an 11-color palette.
 
 ## Repository layout
 
 | Path | Contents | Status |
 | --- | --- | --- |
 | [`spec/`](spec/) | Schema, palette and written specification | Draft |
-| [`conformance/`](conformance/) | Shared fixtures every implementation must pass | 66 cases |
+| [`conformance/`](conformance/) | Shared fixtures every implementation must pass | 69 cases |
 | [`packages/schema`](packages/schema/) | `@blockwell/schema` — TypeScript reference validator and flattener | Working |
 | [`go/`](go/) | Go module | Skeleton |
 | [`dotnet/`](dotnet/) | `Blockwell` NuGet package | Skeleton |

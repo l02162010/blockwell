@@ -7,23 +7,23 @@ export const PALETTE_COLORS = raw.tokens as Record<string, Record<PaletteTarget,
 
 const vars = (target: PaletteTarget) =>
   Object.entries(PALETTE_COLORS)
-    .map(([k, v]) => `--bw-color-${k}:${v[target].text};--bw-bg-${k}:${v[target].bg};`)
+    .map(([k, v]) => `--editor-color-${k}:${v[target].text};--editor-bg-${k}:${v[target].bg};`)
     .join('');
 
 /**
  * CSS for palette tokens: custom properties per theme and the `.bw-c-*` / `.bw-bg-*` classes the
  * renderer emits. Documents only ever hold token names, never CSS.
  *
- * Dark values apply under `[data-theme="dark"]`, and under `prefers-color-scheme: dark` unless an
- * ancestor sets `data-theme="light"`.
+ * Dark values apply under `[data-theme="dark"]` or `.dark`, and under `prefers-color-scheme: dark`
+ * unless the root sets `data-theme="light"`. Only variables change: documents stay the same.
  */
 export function paletteCss(): string {
   const classes = Object.keys(PALETTE_COLORS)
-    .map((k) => `.bw-c-${k}{color:var(--bw-color-${k})}.bw-bg-${k}{background-color:var(--bw-bg-${k});border-radius:2px}`)
+    .map((k) => `.bw-c-${k}{color:var(--editor-color-${k})}.bw-bg-${k}{background-color:var(--editor-bg-${k});border-radius:2px}`)
     .join('');
   return (
     `:root{${vars('light')}}` +
-    `[data-theme="dark"]{${vars('dark')}}` +
+    `[data-theme="dark"],.dark{${vars('dark')}}` +
     `@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){${vars('dark')}}}` +
     `@media print{:root{${vars('print')}}}` +
     classes

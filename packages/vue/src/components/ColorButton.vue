@@ -7,7 +7,7 @@ const props = defineProps<{ size?: 'sm' | 'md'; source?: 'toolbar' | 'bubble' }>
 const emit = defineEmits<{ click: [e: MouseEvent] }>();
 const { active, ui, messages } = useBlockwell();
 const swatch = (token: string | null | undefined, kind: 'color' | 'bg') =>
-  token && token !== 'mixed' ? `var(--bw-${kind === 'color' ? 'color' : 'bg'}-${token})` : undefined;
+  token && token !== 'mixed' ? `var(--editor-${kind}-${token})` : undefined;
 const text = computed(() => swatch(active.value?.color, 'color'));
 const bar = computed(() => swatch(active.value?.highlight, 'bg') ?? swatch(active.value?.color, 'color'));
 const open = computed(() => ui.popover === 'color' && ui.source === (props.source ?? 'toolbar'));

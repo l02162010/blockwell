@@ -252,25 +252,25 @@ describe('input rules', () => {
   for (const [typed, expected] of cases) {
     it(`"${typed}"`, () => {
       const d = doc(p('a', typed));
-      const r = run(d, sel(['a', typed.length]), (tr) => runInputRules(tr, o));
+      const r = run(d, sel(['a', typed.length]), (tr) => !!runInputRules(tr, o));
       expect(r.ok).toBe(true);
       expect(r.doc.blocks[0]).toMatchObject({ ...expected, text: '' });
     });
   }
 
   it('"> " wraps in a quote', () => {
-    const r = run(doc(p('a', '> ')), sel(['a', 2]), (tr) => runInputRules(tr, o));
+    const r = run(doc(p('a', '> ')), sel(['a', 2]), (tr) => !!runInputRules(tr, o));
     expect(r.doc.blocks[0]!.type).toBe('quote');
   });
 
   it('"---" adds a divider', () => {
-    const r = run(doc(p('a', '---')), sel(['a', 3]), (tr) => runInputRules(tr, o));
+    const r = run(doc(p('a', '---')), sel(['a', 3]), (tr) => !!runInputRules(tr, o));
     expect(r.doc.blocks.map((b) => b.type)).toEqual(['divider', 'paragraph']);
   });
 
   it('only fires at the start of a paragraph', () => {
     const tr = new EditorState(doc(p('a', 'x # ')), sel(['a', 4])).tr();
-    expect(runInputRules(tr, o)).toBe(false);
+    expect(runInputRules(tr, o)).toBeNull();
   });
 });
 

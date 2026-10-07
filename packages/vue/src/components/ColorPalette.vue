@@ -32,7 +32,7 @@ const setHighlight = (t: string) => ctx.editor.value.setHighlight(t === 'default
           :class="{ 'bw-current': color === t }"
           :aria-checked="color === t"
           :title="t"
-          :style="{ color: t === 'default' ? undefined : `var(--bw-color-${t})` }"
+          :style="{ color: t === 'default' ? undefined : `var(--editor-color-${t})` }"
           @mousedown="keepFocus"
           @click="setColor(t)"
         >A</button>
@@ -51,7 +51,7 @@ const setHighlight = (t: string) => ctx.editor.value.setHighlight(t === 'default
           :class="{ 'bw-current': highlight === t }"
           :aria-checked="highlight === t"
           :title="t"
-          :style="{ background: t === 'default' ? undefined : `var(--bw-bg-${t})` }"
+          :style="{ background: t === 'default' ? undefined : `var(--editor-bg-${t})` }"
           @mousedown="keepFocus"
           @click="setHighlight(t)"
         ><BwIcon v-if="t === 'default'" name="block" :size="16" /></button>

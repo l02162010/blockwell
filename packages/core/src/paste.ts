@@ -16,8 +16,34 @@ export interface PasteReport {
   droppedAttrs: string[];
   /** Links or images whose URL failed the check. */
   unsafeUrls: number;
-  source: 'blockwell' | 'html' | 'text';
+  /** Where the content came from; `gdocs` and `word` get their own mapping rules. */
+  source: 'blockwell' | 'html' | 'gdocs' | 'word' | 'text' | 'markdown';
+  /** Blocks produced per kind (`heading`, `list`, `table`, `code`, `quote`, `image`, `divider`). */
+  counts: Record<string, number>;
+  /** Kinds of formatting that were stripped: `font`, `line-height`, `mso`, `comments`, `color`. */
+  removed: string[];
+  /** Embedded media (iframe, video, audio, object) that the schema cannot hold. */
+  skipped: number;
+  /** Problems worth a person's review, for migrations (engine guide §10). */
+  issues: PasteIssue[];
 }
+
+export interface PasteIssue {
+  code: 'color-dropped' | 'unsafe-link' | 'unsafe-image' | 'merged-cells' | 'embed' | 'list-depth';
+  count: number;
+}
+
+export const emptyReport = (source: PasteReport['source']): PasteReport => ({
+  kept: [],
+  unknownElements: 0,
+  droppedAttrs: [],
+  unsafeUrls: 0,
+  source,
+  counts: {},
+  removed: [],
+  skipped: 0,
+  issues: [],
+});
 
 export interface ParsedPaste {
   blocks: Block[];
@@ -28,6 +54,7 @@ const BLOCK_TAGS = new Set(['P', 'DIV', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'LI'
 const INLINE_MARK: Record<string, string> = { B: 'bold', STRONG: 'bold', I: 'italic', EM: 'italic', U: 'underline', S: 'strike', DEL: 'strike', STRIKE: 'strike', CODE: 'code', KBD: 'code', SAMP: 'code' };
 const KNOWN = new Set([...BLOCK_TAGS, ...Object.keys(INLINE_MARK), 'A', 'BR', 'SPAN', 'BODY', 'HTML', 'HEAD', 'MARK', 'SUB', 'SUP', 'SMALL', 'FONT', 'LABEL', 'INPUT', 'META', 'COLGROUP', 'COL', 'CAPTION', 'TT', 'Q', 'CITE', 'ABBR', 'TIME', 'WBR']);
 /** Elements whose content is never text. */
+const EMBEDS = new Set(['IFRAME', 'OBJECT', 'EMBED', 'VIDEO', 'AUDIO']);
 const SKIP = new Set(['SCRIPT', 'STYLE', 'TEMPLATE', 'NOSCRIPT', 'IFRAME', 'OBJECT', 'EMBED', 'SVG', 'MATH', 'CANVAS', 'VIDEO', 'AUDIO', 'TITLE', 'HEAD', 'BUTTON', 'SELECT', 'TEXTAREA']);
 
 const CONTROL = /[\u0000-\u0008\u000B-\u001F\u007F\uFFFC]/g;
@@ -103,7 +130,15 @@ function trimBlock(b: Block): Block {
  */
 export function parseHtml(html: string, parser: DOMParser = new DOMParser()): ParsedPaste {
   const dom = parser.parseFromString(html, 'text/html');
-  const report: PasteReport = { kept: [], unknownElements: 0, droppedAttrs: [], unsafeUrls: 0, source: 'html' };
+  const source: PasteReport['source'] = /docs-internal-guid/.test(html)
+    ? 'gdocs'
+    : /urn:schemas-microsoft-com:office|class=["']?Mso|mso-/i.test(html)
+      ? 'word'
+      : 'html';
+  const report = emptyReport(source);
+  const issues = new Map<PasteIssue['code'], number>();
+  const issue = (code: PasteIssue['code']) => issues.set(code, (issues.get(code) ?? 0) + 1);
+  const removed = new Set<string>();
   const kept = new Set<string>();
   const dropped = new Set<string>();
   const blocks: Block[] = [];
@@ -161,11 +196,24 @@ export function parseHtml(html: string, parser: DOMParser = new DOMParser()): Pa
     const el = node as Element;
     const tag = el.tagName.toUpperCase();
     if (SKIP.has(tag)) {
-      if (tag !== 'HEAD' && tag !== 'TITLE') report.unknownElements++;
+      if (EMBEDS.has(tag)) {
+        report.skipped++;
+        issue('embed');
+      } else if (tag !== 'HEAD' && tag !== 'TITLE' && tag !== 'STYLE') report.unknownElements++;
       return;
     }
+    const style = el.getAttribute('style') ?? '';
+    // Word list markers ("1." / "·") are separate spans; the list item carries the numbering.
+    if (source === 'word' && /mso-list:\s*ignore/i.test(style)) return;
     noteAttrs(el);
-    if (!KNOWN.has(tag)) report.unknownElements++;
+    if (el.getAttribute('color') || /(^|;)\s*color\s*:/i.test(style)) {
+      removed.add('color');
+      if (source === 'html') issue('color-dropped');
+    }
+    if (source === 'gdocs' && /font-(family|size)/i.test(style)) removed.add('font');
+    if (source === 'gdocs' && /line-height/i.test(style)) removed.add('line-height');
+    // Office namespaces (o:p, w:sdt) are wrappers: keep their text without counting them.
+    if (!KNOWN.has(tag) && !tag.includes(':')) report.unknownElements++;
 
     const kids = () => Array.from(el.childNodes).forEach((c) => walk(c, active, pre));
     const kidsWith = (marks: Mark[]) => Array.from(el.childNodes).forEach((c) => walk(c, marks, pre));
@@ -203,6 +251,17 @@ export function parseHtml(html: string, parser: DOMParser = new DOMParser()): Pa
           kids();
           return;
         }
+        if (source === 'word' && /mso-list/i.test(style)) {
+          const level = Number(style.match(/level(\d+)/i)?.[1] ?? 1);
+          const marker = el.querySelector('[style*="mso-list"]')?.textContent?.trim() ?? '';
+          const attrs: Attrs = { style: /^(\d+|[a-z]{1,3}|[ivxlc]+)[.)]$/i.test(marker) ? 'ordered' : 'bullet' };
+          if (level > 1) attrs.indent = Math.min(6, level - 1);
+          if (level > 7) issue('list-depth');
+          open('listItem', attrs);
+          kids();
+          flush();
+          return;
+        }
         open(list.length ? 'listItem' : 'paragraph', list.length ? listAttrs() : {});
         kids();
         flush();
@@ -210,6 +269,7 @@ export function parseHtml(html: string, parser: DOMParser = new DOMParser()): Pa
       case 'UL':
       case 'OL': {
         flush();
+        if (list.length === 7) issue('list-depth');
         list = [...list, { style: tag === 'OL' ? 'ordered' : 'bullet', depth: list.length }];
         kids();
         flush();
@@ -261,6 +321,7 @@ export function parseHtml(html: string, parser: DOMParser = new DOMParser()): Pa
         const src = el.getAttribute('src') ?? '';
         if (!isSafeUrl(src, IMAGE_SCHEMES)) {
           report.unsafeUrls++;
+          issue('unsafe-image');
           return;
         }
         flush();
@@ -275,6 +336,7 @@ export function parseHtml(html: string, parser: DOMParser = new DOMParser()): Pa
         flush();
         const rows = Array.from(el.querySelectorAll('tr')).filter((tr) => tr.closest('table') === el);
         const cells = rows.map((r) => Array.from(r.children).filter((c) => c.tagName === 'TD' || c.tagName === 'TH'));
+        if (cells.flat().some((c) => Number(c.getAttribute('colspan') ?? 1) > 1 || Number(c.getAttribute('rowspan') ?? 1) > 1)) issue('merged-cells');
         const cols = Math.min(spec.limits.maxTableColumns, Math.max(1, ...cells.map((c) => c.length)));
         if (rows.length === 0) return;
         const table = emptyTable(Math.min(rows.length, spec.limits.maxTableRows), cols);
@@ -297,7 +359,10 @@ export function parseHtml(html: string, parser: DOMParser = new DOMParser()): Pa
           kept.add('link');
           kidsWith([...active.filter((m) => m.type !== 'link'), { type: 'link', from: 0, to: 0, attrs: { href } }]);
         } else {
-          if (href) report.unsafeUrls++;
+          if (href) {
+            report.unsafeUrls++;
+            issue('unsafe-link');
+          }
           kids();
         }
         return;
@@ -306,9 +371,19 @@ export function parseHtml(html: string, parser: DOMParser = new DOMParser()): Pa
         return;
       default: {
         const mark = INLINE_MARK[tag];
-        if (mark) {
+        // Google Docs wraps everything in <b style="font-weight:normal">; that is not bold.
+        if (mark && !(source === 'gdocs' && /font-weight:\s*(normal|[1-5]00)\b/i.test(style))) {
           kept.add(mark);
           kidsWith(active.some((m) => m.type === mark) ? active : [...active, { type: mark, from: 0, to: 0 }]);
+        } else if (source === 'gdocs' && style) {
+          // Google Docs expresses formatting as inline style; read only these four properties.
+          const extra: Mark[] = [];
+          if (/font-weight:\s*(bold|[6-9]00)\b/i.test(style)) extra.push({ type: 'bold', from: 0, to: 0 });
+          if (/font-style:\s*italic/i.test(style)) extra.push({ type: 'italic', from: 0, to: 0 });
+          if (/text-decoration[^;]*underline/i.test(style)) extra.push({ type: 'underline', from: 0, to: 0 });
+          if (/text-decoration[^;]*line-through/i.test(style)) extra.push({ type: 'strike', from: 0, to: 0 });
+          extra.forEach((m) => kept.add(m.type));
+          kidsWith([...active, ...extra.filter((m) => !active.some((a) => a.type === m.type))]);
         } else kids();
       }
     }
@@ -316,9 +391,42 @@ export function parseHtml(html: string, parser: DOMParser = new DOMParser()): Pa
 
   walk(dom.body, [], false);
   flush();
+  if (source === 'word') {
+    if (/mso-/i.test(html)) removed.add('mso');
+    if (/<!--/.test(html)) removed.add('comments');
+  }
   report.kept = [...kept];
   report.droppedAttrs = [...dropped];
-  return { blocks: sanitize(blocks), report };
+  report.removed = [...removed];
+  report.issues = [...issues].map(([code, count]) => ({ code, count }));
+  const clean = sanitize(blocks);
+  report.counts = countBlocks(clean);
+  return { blocks: clean, report };
+}
+
+/** Blocks per kind, for paste and migration summaries. */
+export function countBlocks(blocks: Block[]): Record<string, number> {
+  const counts: Record<string, number> = {};
+  const add = (k: string) => (counts[k] = (counts[k] ?? 0) + 1);
+  const walk = (list: Block[]) => {
+    for (const b of list) {
+      const k = b.type === 'listItem' ? 'list' : b.type;
+      if (k !== 'paragraph' && k !== 'tableRow' && k !== 'tableCell') add(k);
+      if (b.children && b.type !== 'table') walk(b.children);
+    }
+  };
+  walk(blocks);
+  return counts;
+}
+
+/**
+ * Converts stored HTML (the old rich-textarea content) to a document, for batch migration. The
+ * result is validated; `issues` lists what a person should review before accepting it.
+ */
+export function convertHtml(html: string, parser?: DOMParser): { doc: Doc; ok: boolean; report: PasteReport } {
+  const { blocks, report } = parseHtml(html, parser);
+  const doc: Doc = { version: 1, blocks: blocks.length ? blocks : [{ id: newId(), type: 'paragraph', text: '' }] };
+  return { doc, ok: validate(doc).ok, report };
 }
 
 function collectInline(el: Element, line: Line, active: Mark[], kept: Set<string>, report: PasteReport) {
@@ -383,6 +491,6 @@ export function parseBlockwell(json: string): ParsedPaste | null {
   if (!res.ok) return null;
   return {
     blocks: (doc as Doc).blocks.map(withFreshIds),
-    report: { kept: [], unknownElements: 0, droppedAttrs: [], unsafeUrls: 0, source: 'blockwell' },
+    report: emptyReport('blockwell'),
   };
 }

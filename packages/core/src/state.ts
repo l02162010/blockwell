@@ -33,6 +33,8 @@ export class Tr {
   ops: Op[] = [];
   selection: Selection | null;
   mergeable = false;
+  /** Text a command could not insert because the block hit `limits.maxTextLength`. */
+  dropped: { block: string; text: string } | null = null;
 
   constructor(
     readonly before: EditorState,

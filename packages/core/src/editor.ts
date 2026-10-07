@@ -1,4 +1,4 @@
-import { spec, validate } from '@blockwell/schema';
+import { isSafeUrl, spec, validate } from '@blockwell/schema';
 import * as C from './commands.js';
 import { blockElementOf, containerText, domToOffset, offsetToDom, textContainerOf } from './domPos.js';
 import { History } from './history.js';
@@ -18,7 +18,8 @@ import {
   textBlocks,
   textLength,
 } from './model.js';
-import { CLIPBOARD_MIME, parseBlockwell, parseHtml, type PasteReport } from './paste.js';
+import { looksLikeMarkdown, parseMarkdown } from './markdown.js';
+import { CLIPBOARD_MIME, emptyReport, parseBlockwell, parseHtml, type PasteReport } from './paste.js';
 import { listNumbers, renderBlock, type RenderContext } from './render.js';
 import { applyTransaction, EditorState, type Tr } from './state.js';
 import type { ActiveState, Attrs, Block, BlockKind, Doc, Mark, Pos, Selection, Transaction } from './types.js';
@@ -36,12 +37,20 @@ export interface EditorOptions {
   allowedBlocks?: readonly string[];
   /** Shown in the focused empty paragraph. */
   placeholder?: string;
+  /** Shown in other empty blocks by kind, e.g. `{ heading1: 'Heading 1', todo: 'To-do' }`. */
+  placeholders?: Partial<Record<BlockKind, string>>;
+  /** Text shown on a code block's copy button after copying. */
+  copiedLabel?: string;
   /** Shown when the whole document is empty and unfocused. */
   emptyPlaceholder?: string;
   mentionLabel?: (userId: string) => string;
   languageLabel?: (language: string) => string;
   /** Uploads an image file and resolves to an `https:` URL. Without it, pasted or dropped files are ignored. */
   uploadImage?: (file: File, onProgress: (fraction: number) => void) => Promise<UploadResult>;
+  /** Top-level block count above which only blocks near the viewport are rendered. Default 2000. */
+  virtualizeAbove?: number;
+  /** Enables `@` mentions. The picker UI asks the host for members; documents keep only ids. */
+  mentions?: boolean;
 }
 
 export interface SlashState {
@@ -50,6 +59,9 @@ export interface SlashState {
   from: number;
   query: string;
 }
+
+type TriggerKind = 'slash' | 'mention';
+const TRIGGER_CHARS: Record<TriggerKind, string> = { slash: '/', mention: '@' };
 
 export interface Upload {
   id: string;
@@ -61,7 +73,11 @@ export interface Upload {
 export type EditorAction =
   | { type: 'code-language'; block: string }
   | { type: 'link' }
-  | { type: 'escape' };
+  | { type: 'escape' }
+  /** Mod-/ */
+  | { type: 'shortcuts' }
+  /** Mod-F */
+  | { type: 'search' };
 
 export interface EditorEvents {
   /** Any state change: document, selection or editability. */
@@ -74,15 +90,43 @@ export interface EditorEvents {
   paste: { report: PasteReport };
   action: EditorAction;
   slash: { slash: SlashState | null };
+  /** `@` typed: the mention picker should show members matching `query`. */
+  mention: { mention: SlashState | null };
+  /** A Markdown shortcut just converted a block; Backspace now reverts it. `null` when that ends. */
+  rule: { rule: { block: string; marker: string; kind: BlockKind | null } | null };
   uploads: { uploads: Upload[] };
   /** A command could not do anything (e.g. Tab on a list item already at max depth). */
   refuse: { reason: string; block?: string | undefined };
   /** A transaction failed validation and was dropped. */
   reject: { errors: unknown };
+  /**
+   * Something the schema blocked or changed, to show next to where it happened (design §04):
+   * `reject` refused, `adjust` changed what was asked, `skip` left something out.
+   */
+  feedback: Feedback;
+  search: { search: { query: string; count: number; index: number } | null };
+  /** A formatting change, for screen-reader announcements. */
+  format: { what: string; on: boolean };
 }
 
 type Handler<K extends keyof EditorEvents> = (e: EditorEvents[K]) => void;
 export type KeyHandler = (e: KeyboardEvent) => boolean;
+
+export interface Feedback {
+  level: 'reject' | 'adjust' | 'skip';
+  code: 'length' | 'image-src' | 'unsupported' | 'invalid' | 'link';
+  block?: string | undefined;
+  count?: number;
+  /** For `length`: the text that was not inserted. */
+  rest?: string;
+}
+
+/** A text range to paint with a named highlight (search results, comment anchors). */
+export interface HighlightRange {
+  block: string;
+  from: number;
+  to: number;
+}
 
 const isMac = typeof navigator !== 'undefined' && /Mac|iP(hone|ad|od)/.test(navigator.platform);
 
@@ -100,12 +144,15 @@ export class Editor {
   private rendered = new Map<string, { block: Block; el: HTMLElement; num: number | undefined }>();
   private composing = false;
   private renderPending = false;
-  private slashState: SlashState | null = null;
+  private triggers: Record<TriggerKind, SlashState | null> = { slash: null, mention: null };
   private uploadList: Upload[] = [];
   private lastPastePlain: string | null = null;
   private teardown: (() => void)[] = [];
   private placeholderEl: HTMLElement | null = null;
   private resizing = false;
+  private ruleArmed: string | null = null;
+  private highlightSets = new Map<string, HighlightRange[]>();
+  private blockClassSets = new Map<string, Map<string, string>>();
 
   constructor(options: EditorOptions = {}) {
     this.options = options;
@@ -190,19 +237,22 @@ export class Editor {
     if (!res.ok) {
       if (typeof console !== 'undefined') console.warn('blockwell: transaction rejected', res.errors);
       this.emit('reject', { errors: res.errors });
+      this.emit('feedback', { level: 'reject', code: 'invalid', block: this.focusBlockId() ?? undefined });
       this.render(true);
       return false;
     }
     this.apply(res.state, res.tr);
     this.history.record(res.tr);
+    if (tr.dropped) this.emit('feedback', { level: 'adjust', code: 'length', block: tr.dropped.block, count: tr.dropped.text.length, rest: tr.dropped.text });
     return true;
   }
 
   private apply(state: EditorState, tr: Transaction) {
+    this.disarmRule();
     this.state = state;
     this.storedMarks = null;
     this.render();
-    this.updateSlash();
+    this.updateTriggers();
     this.emit('change', { doc: state.doc, tr });
     this.emit('update', { editor: this });
   }
@@ -244,11 +294,12 @@ export class Editor {
   }
 
   setSelection(sel: Selection | null, { write = true } = {}) {
+    this.disarmRule();
     this.state = new EditorState(this.state.doc, sel);
     this.storedMarks = null;
     if (write) this.writeSelection();
     this.updateDecorations();
-    this.updateSlash();
+    this.updateTriggers();
     this.emit('selection', { selection: sel });
     this.emit('update', { editor: this });
   }
@@ -383,10 +434,14 @@ export class Editor {
       let next = has ? current.filter((m) => m.type !== type) : [...current, { type, from: 0, to: 0 }];
       if (!has && type === 'code') next = next.filter((m) => m.type === 'code');
       this.storedMarks = next;
+      this.emit('format', { what: type, on: !has });
       this.emit('update', { editor: this });
       return true;
     }
-    return this.run((tr) => C.toggleMark(tr, type));
+    const was = this.activeState().marks[type];
+    const ok = this.run((tr) => C.toggleMark(tr, type));
+    if (ok) this.emit('format', { what: type, on: !was });
+    return ok;
   }
 
   /** Sets text color to a palette token, or clears it with null. */
@@ -409,7 +464,9 @@ export class Editor {
       this.emit('update', { editor: this });
       return true;
     }
-    return this.run((tr) => C.setMarkValue(tr, type, token ? { value: token } : null));
+    const ok = this.run((tr) => C.setMarkValue(tr, type, token ? { value: token } : null));
+    if (ok) this.emit('format', { what: token ? `${type}:${token}` : type, on: !!token });
+    return ok;
   }
 
   /** Sets the link on the selection. Returns false for URLs that fail the scheme check. */
@@ -428,7 +485,9 @@ export class Editor {
   }
 
   setBlockKind(kind: BlockKind): boolean {
-    return this.run((tr) => C.setBlockKind(tr, kind, this.commandOptions), { seal: true });
+    const ok = this.run((tr) => C.setBlockKind(tr, kind, this.commandOptions), { seal: true });
+    if (ok) this.emit('format', { what: kind, on: true });
+    return ok;
   }
 
   /** Converts back to a paragraph when every selected block already has `kind`. */
@@ -467,8 +526,11 @@ export class Editor {
   }
 
   /** Inserts an image. `src` must pass the image URL check (https only). */
-  insertImage(attrs: UploadResult): boolean {
-    if (!C.IMAGE_SCHEMES.length) return false;
+  insertImage(attrs: UploadResult & { align?: 'left' | 'center' | 'full' }): boolean {
+    if (!isSafeUrl(attrs.src, C.IMAGE_SCHEMES)) {
+      this.emit('feedback', { level: 'reject', code: 'image-src', block: this.focusBlockId() ?? undefined });
+      return false;
+    }
     return this.run((tr) => C.insertBlock(tr, C.newImage(attrs), this.commandOptions), { seal: true });
   }
 
@@ -480,14 +542,33 @@ export class Editor {
     return this.run((tr) => C.insertText(tr, text, this.storedMarks));
   }
 
+  /** Inserts text that did not fit (see the `length` feedback) as paragraphs after `block`. */
+  insertOverflow(block: string, text: string): boolean {
+    return this.run((tr) => {
+      const loc = locate(tr.doc, block);
+      if (!loc) return false;
+      const blocks = C.overflowToBlocks(text);
+      blocks.forEach((b, i) => tr.insertBlock(loc.parent, loc.index + 1 + i, b));
+      const last = blocks[blocks.length - 1];
+      if (last) tr.setSelection(caret(last.id, textLength(last)));
+      return blocks.length > 0;
+    }, { seal: true });
+  }
+
+  /** Marks and mentions that converting the selection to `kind` would remove. */
+  conversionLoss(kind: BlockKind) {
+    return C.conversionLoss(this.state.tr(), kind);
+  }
+
   setCodeLanguage(block: string, language: string): boolean {
     return this.run((tr) => (tr.updateAttrs(block, { language: language === 'plaintext' ? undefined : language }), true));
   }
 
-  setImageAttrs(block: string, patch: { alt?: string; width?: number | null }): boolean {
+  setImageAttrs(block: string, patch: { alt?: string; width?: number | null; align?: 'left' | 'center' | 'full' }): boolean {
     return this.run((tr) => {
       const p: Record<string, string | number | undefined> = {};
       if (patch.alt !== undefined) p.alt = patch.alt || undefined;
+      if (patch.align !== undefined) p.align = patch.align === 'center' ? undefined : patch.align;
       if (patch.width !== undefined) p.width = patch.width === null ? undefined : Math.round(Math.max(16, Math.min(2000, patch.width)));
       tr.updateAttrs(block, p);
       return true;
@@ -567,72 +648,173 @@ export class Editor {
     return sel?.type === 'text' ? sel.focus.block : sel?.type === 'node' ? sel.block : null;
   }
 
+  private disarmRule() {
+    if (!this.ruleArmed) return;
+    this.ruleArmed = null;
+    this.emit('rule', { rule: null });
+  }
+
   // -------------------------------------------------------------------------------------------
-  // Slash menu
+  // Decorations
+
+  /**
+   * Paints ranges with the CSS Custom Highlight API under the name `bw-<name>` (style it with
+   * `::highlight(bw-<name>)`). Nothing is added to the DOM, so editing and offsets are unaffected.
+   * Pass an empty list to clear.
+   */
+  setHighlights(name: string, ranges: HighlightRange[]) {
+    if (ranges.length) this.highlightSets.set(name, ranges);
+    else this.highlightSets.delete(name);
+    this.paintHighlights();
+  }
+
+  /** Adds `className` to the elements of the given blocks (e.g. diff or comment markers). */
+  setBlockClasses(name: string, classes: Record<string, string>) {
+    const entries = Object.entries(classes);
+    if (entries.length) this.blockClassSets.set(name, new Map(entries));
+    else this.blockClassSets.delete(name);
+    this.paintBlockClasses();
+  }
+
+  private paintHighlights() {
+    if (!this.dom) return;
+    const mine = new Map<string, Range[]>();
+    for (const [name, list] of this.highlightSets) {
+      const ranges: Range[] = [];
+      for (const h of list) {
+        const a = this.posToDom({ block: h.block, offset: h.from });
+        const b = this.posToDom({ block: h.block, offset: h.to });
+        if (!a || !b) continue;
+        const r = this.dom.ownerDocument.createRange();
+        r.setStart(a.node, a.offset);
+        r.setEnd(b.node, b.offset);
+        ranges.push(r);
+      }
+      mine.set(name, ranges);
+    }
+    publishHighlights(this, mine);
+  }
+
+  private paintBlockClasses() {
+    if (!this.dom) return;
+    this.dom.querySelectorAll('[data-bw-deco]').forEach((e) => {
+      for (const c of (e.getAttribute('data-bw-deco') ?? '').split(' ')) if (c) e.classList.remove(c);
+      e.removeAttribute('data-bw-deco');
+    });
+    for (const map of this.blockClassSets.values()) {
+      for (const [id, cls] of map) {
+        const e = this.blockElement(id);
+        if (!e) continue;
+        e.classList.add(...cls.split(' ').filter(Boolean));
+        e.setAttribute('data-bw-deco', `${e.getAttribute('data-bw-deco') ?? ''} ${cls}`.trim());
+      }
+    }
+  }
+
+  // -------------------------------------------------------------------------------------------
+  // Typed triggers: `/` opens the block menu, `@` the mention picker
 
   get slash(): SlashState | null {
-    return this.slashState;
+    return this.triggers.slash;
+  }
+
+  get mention(): SlashState | null {
+    return this.triggers.mention;
   }
 
   closeSlash() {
-    if (!this.slashState) return;
-    this.slashState = null;
-    this.emit('slash', { slash: null });
+    this.closeTrigger('slash');
+  }
+
+  closeMention() {
+    this.closeTrigger('mention');
+  }
+
+  private closeTrigger(kind: TriggerKind) {
+    if (!this.triggers[kind]) return;
+    this.triggers[kind] = null;
+    this.emit(kind, { [kind]: null } as never);
+  }
+
+  /** Removes the typed trigger and query, leaving the caret where the trigger was. */
+  private consumeTrigger(kind: TriggerKind): SlashState | null {
+    const s = this.triggers[kind];
+    if (!s) return null;
+    this.closeTrigger(kind);
+    const sel = this.state.selection;
+    const end = sel?.type === 'text' && sel.focus.block === s.block ? sel.focus.offset : s.from + 1 + s.query.length;
+    this.run(
+      (tr) => {
+        tr.deleteText(s.block, s.from, end);
+        tr.setSelection(caret(s.block, s.from));
+        return true;
+      },
+      { seal: true },
+    );
+    return s;
   }
 
   /** Removes the typed `/query` and runs `fn` (a block conversion or insertion). */
   runSlash(fn: (editor: Editor) => void) {
-    const s = this.slashState;
-    if (!s) return;
-    this.closeSlash();
-    const sel = this.state.selection;
-    const end = sel?.type === 'text' && sel.focus.block === s.block ? sel.focus.offset : s.from + 1 + s.query.length;
-    this.run((tr) => {
-      tr.deleteText(s.block, s.from, end);
-      tr.setSelection(caret(s.block, s.from));
-      return true;
-    }, { seal: true });
-    fn(this);
+    if (this.consumeTrigger('slash')) fn(this);
+  }
+
+  /** Replaces the typed `@query` with a mention of `userId`. Documents store the id only. */
+  runMention(userId: string) {
+    if (!this.consumeTrigger('mention')) return;
+    this.insertMention(userId);
+    this.insertText(' ');
   }
 
   /** Types `/` at the caret and opens the slash menu, as if the user had typed it. */
   startSlash() {
     if (!this.insertText('/')) return;
-    this.maybeOpenSlash();
+    this.maybeOpenTrigger();
   }
 
-  private updateSlash() {
-    const s = this.slashState;
-    if (!s) return;
-    const sel = this.state.selection;
-    const b = getBlock(this.state.doc, s.block);
-    const ok =
-      this.editable &&
-      sel?.type === 'text' &&
-      isCollapsed(sel) &&
-      sel.focus.block === s.block &&
-      !!b &&
-      (b.text ?? '')[s.from] === '/' &&
-      sel.focus.offset > s.from;
-    if (!ok) return this.closeSlash();
-    const query = (b.text ?? '').slice(s.from + 1, sel.focus.offset);
-    if (query.length > 32 || /[\n\uFFFC]/.test(query) || /\s{2}/.test(query)) return this.closeSlash();
-    if (query !== s.query) {
-      this.slashState = { ...s, query };
-      this.emit('slash', { slash: this.slashState });
+  private updateTriggers() {
+    for (const kind of ['slash', 'mention'] as const) {
+      const s = this.triggers[kind];
+      if (!s) continue;
+      const sel = this.state.selection;
+      const b = getBlock(this.state.doc, s.block);
+      const ok =
+        this.editable &&
+        sel?.type === 'text' &&
+        isCollapsed(sel) &&
+        sel.focus.block === s.block &&
+        !!b &&
+        (b.text ?? '')[s.from] === TRIGGER_CHARS[kind] &&
+        sel.focus.offset > s.from;
+      if (!ok) {
+        this.closeTrigger(kind);
+        continue;
+      }
+      const query = (b.text ?? '').slice(s.from + 1, sel.focus.offset);
+      if (query.length > 32 || /[\n\uFFFC]/.test(query) || /\s{2}/.test(query) || (kind === 'mention' && /\s/.test(query))) {
+        this.closeTrigger(kind);
+        continue;
+      }
+      if (query !== s.query) {
+        this.triggers[kind] = { ...s, query };
+        this.emit(kind, { [kind]: this.triggers[kind] } as never);
+      }
     }
   }
 
-  private maybeOpenSlash() {
+  private maybeOpenTrigger() {
     const sel = this.state.selection;
     if (sel?.type !== 'text' || !isCollapsed(sel)) return;
     const b = getBlock(this.state.doc, sel.focus.block);
     if (!b || b.type === 'code') return;
     const at = sel.focus.offset - 1;
     const text = b.text ?? '';
-    if (text[at] !== '/' || (at > 0 && !/\s/.test(text[at - 1]!))) return;
-    this.slashState = { block: b.id, from: at, query: '' };
-    this.emit('slash', { slash: this.slashState });
+    const kind = (Object.keys(TRIGGER_CHARS) as TriggerKind[]).find((k) => TRIGGER_CHARS[k] === text[at]);
+    if (!kind || (at > 0 && !/\s/.test(text[at - 1]!))) return;
+    if (kind === 'mention' && !this.options.mentions) return;
+    if (kind === 'slash' && this.commandOptions.allowedBlocks?.size === 1) return;
+    this.triggers[kind] = { block: b.id, from: at, query: '' };
+    this.emit(kind, { [kind]: this.triggers[kind] } as never);
   }
 
   // -------------------------------------------------------------------------------------------
@@ -713,6 +895,8 @@ export class Editor {
     on(root, 'cut', (e: ClipboardEvent) => this.onCopy(e, true));
     on(root, 'paste', (e: ClipboardEvent) => this.onPaste(e));
     on(root, 'drop', (e: DragEvent) => this.onDrop(e));
+    // Text is moved with cut and paste, blocks with their drag handles; native drags would duplicate.
+    on(root, 'dragstart', (e: DragEvent) => e.preventDefault());
     on(root, 'dragover', (e: DragEvent) => {
       if (e.dataTransfer?.types.includes('Files')) e.preventDefault();
     });
@@ -729,9 +913,19 @@ export class Editor {
       this.emit('update', { editor: this });
     });
     on(doc, 'selectionchange', () => this.onSelectionChange());
+    on(window, 'scroll', () => this.onScroll(), { capture: true, passive: true });
+    on(window, 'beforeprint', () => {
+      this.printing = true;
+      this.render();
+    });
+    on(window, 'afterprint', () => {
+      this.printing = false;
+      this.render();
+    });
   }
 
   destroy() {
+    publishHighlights(this, null);
     this.teardown.forEach((f) => f());
     this.teardown = [];
     if (this.dom) {
@@ -766,13 +960,18 @@ export class Editor {
     const numbers = listNumbers(this.state.doc.blocks);
     const next = new Map<string, { block: Block; el: HTMLElement; num: number | undefined }>();
     const desired: HTMLElement[] = [];
-    for (const block of this.state.doc.blocks) {
+    const blocks = this.state.doc.blocks;
+    const [start, end] = this.windowRange();
+    if (start > 0) desired.push(this.spacer('top', this.heightOf(0, start)));
+    for (let i = start; i < end; i++) {
+      const block = blocks[i]!;
       const num = numbers.get(block.id);
       let entry = this.rendered.get(block.id);
       if (!entry || entry.block !== block || entry.num !== num) entry = { block, el: renderBlock(block, { ...ctx, numbers }), num };
       next.set(block.id, entry);
       desired.push(entry.el);
     }
+    if (end < blocks.length) desired.push(this.spacer('bottom', this.heightOf(end, blocks.length)));
     // Drop stale blocks and anything the browser inserted, then put the rest in order.
     const keep = new Set<Node>(desired);
     for (const n of Array.from(root.childNodes)) if (!keep.has(n)) n.remove();
@@ -782,8 +981,189 @@ export class Editor {
       else root.insertBefore(el, cursor);
     }
     this.rendered = next;
+    if (this.virtual) this.scheduleMeasure();
     this.updateDecorations();
+    this.paintBlockClasses();
+    this.paintHighlights();
     this.writeSelection();
+  }
+
+  // -------------------------------------------------------------------------------------------
+  // Large documents: render only the blocks near the viewport (engine guide §8)
+
+  private heights = new Map<string, number>();
+  private spacers: Partial<Record<'top' | 'bottom', HTMLElement>> = {};
+  private printing = false;
+  private pinned: number | null = null;
+  private measureFrame = 0;
+  private scrollFrame = 0;
+
+  /** True while only part of the document is in the DOM. */
+  get virtual(): boolean {
+    return !this.printing && this.state.doc.blocks.length > (this.options.virtualizeAbove ?? 2000);
+  }
+
+  /** Block counts for status displays. */
+  stats() {
+    return { blocks: allBlocks(this.state.doc).length, topLevel: this.state.doc.blocks.length, virtual: this.virtual, rendered: this.rendered.size };
+  }
+
+  private estimate(id: string) {
+    return this.heights.get(id) ?? 36;
+  }
+
+  private heightOf(from: number, to: number) {
+    let h = 0;
+    const blocks = this.state.doc.blocks;
+    for (let i = from; i < to; i++) h += this.estimate(blocks[i]!.id);
+    return h;
+  }
+
+  private spacer(side: 'top' | 'bottom', height: number): HTMLElement {
+    let el = this.spacers[side];
+    if (!el) {
+      el = document.createElement('div');
+      el.className = 'bw-spacer';
+      el.setAttribute('contenteditable', 'false');
+      el.setAttribute('aria-hidden', 'true');
+      el.setAttribute('data-bw-spacer', side);
+      this.spacers[side] = el;
+    }
+    el.style.height = `${Math.round(height)}px`;
+    return el;
+  }
+
+  private scrollParent(): HTMLElement | null {
+    let n = this.dom?.parentElement ?? null;
+    while (n) {
+      const o = getComputedStyle(n).overflowY;
+      if (o === 'auto' || o === 'scroll') return n;
+      n = n.parentElement;
+    }
+    return null;
+  }
+
+  /** Indices [start, end) of the top-level blocks to render. */
+  private windowRange(): [number, number] {
+    const blocks = this.state.doc.blocks;
+    if (!this.virtual || !this.dom) return [0, blocks.length];
+    const root = this.dom.getBoundingClientRect();
+    const sp = this.scrollParent();
+    const view = sp ? sp.getBoundingClientRect() : new DOMRect(0, 0, window.innerWidth, window.innerHeight);
+    const screen = view.height || window.innerHeight;
+    const top = view.top - root.top - screen;
+    const bottom = view.bottom - root.top + screen;
+    let y = 0, start = 0, end = blocks.length;
+    for (let i = 0; i < blocks.length; i++) {
+      const h = this.estimate(blocks[i]!.id);
+      if (y + h < top) start = i + 1;
+      if (y > bottom) {
+        end = i;
+        break;
+      }
+      y += h;
+    }
+    // Keep the caret's block and a block being revealed in the DOM.
+    const keep = [this.pinned, this.topIndexOf(this.focusBlockId())].filter((i): i is number => i !== null && i >= 0);
+    for (const i of keep) {
+      if (i < start && start - i < 400) start = i;
+      if (i >= end && i - end < 400) end = i + 1;
+    }
+    return [Math.min(start, end), end];
+  }
+
+  private topIndexOf(id: string | null): number | null {
+    if (!id) return null;
+    const chain = [getBlock(this.state.doc, id), ...ancestors(this.state.doc, id)].filter(Boolean) as Block[];
+    const top = chain[chain.length - 1];
+    return top ? (locate(this.state.doc, top.id)?.index ?? null) : null;
+  }
+
+  private scheduleMeasure() {
+    cancelAnimationFrame(this.measureFrame);
+    this.measureFrame = requestAnimationFrame(() => {
+      const els = [...this.rendered.values()].map((v) => v.el);
+      for (let i = 0; i < els.length; i++) {
+        const el = els[i]!, next = els[i + 1];
+        const h = next ? next.offsetTop - el.offsetTop : el.offsetHeight + 14;
+        if (h > 0) this.heights.set(el.getAttribute('data-block-id')!, h);
+      }
+    });
+  }
+
+  private onScroll() {
+    if (!this.virtual || this.scrollFrame) return;
+    this.scrollFrame = requestAnimationFrame(() => {
+      this.scrollFrame = 0;
+      const [start, end] = this.windowRange();
+      const blocks = this.state.doc.blocks;
+      if (this.rendered.has(blocks[start]?.id ?? '') && this.rendered.has(blocks[end - 1]?.id ?? '') && this.rendered.size === end - start) return;
+      this.render();
+    });
+  }
+
+  /** Scrolls a block into view, rendering it first when the document is virtualized. */
+  revealBlock(id: string, opts: { select?: boolean } = {}) {
+    const index = this.topIndexOf(id);
+    if (index === null) return;
+    this.pinned = index;
+    this.render();
+    this.blockElement(id)?.scrollIntoView({ block: 'center' });
+    requestAnimationFrame(() => {
+      this.render();
+      this.pinned = null;
+    });
+    if (opts.select) {
+      const b = getBlock(this.state.doc, id);
+      if (b && isText(b)) this.setSelection(caret(id, 0));
+      else if (b && isAtom(b)) this.setSelection({ type: 'node', block: id });
+    }
+  }
+
+  // -------------------------------------------------------------------------------------------
+  // Search runs on the model, so it also finds blocks that are not rendered
+
+  private searchState: { query: string; matches: HighlightRange[]; index: number } | null = null;
+
+  get search() {
+    const s = this.searchState;
+    return s ? { query: s.query, count: s.matches.length, index: s.index } : null;
+  }
+
+  /** Finds `query` (case-insensitive) in all text, highlights the matches and shows the first. */
+  find(query: string) {
+    if (!query) return this.clearSearch();
+    const q = query.toLocaleLowerCase();
+    const matches: HighlightRange[] = [];
+    for (const b of textBlocks(this.state.doc)) {
+      const text = (b.text ?? '').toLocaleLowerCase();
+      for (let i = text.indexOf(q); i >= 0 && matches.length < 10_000; i = text.indexOf(q, i + q.length)) matches.push({ block: b.id, from: i, to: i + q.length });
+    }
+    this.searchState = { query, matches, index: matches.length ? 0 : -1 };
+    this.showMatch();
+  }
+
+  findNext(dir: 1 | -1 = 1) {
+    const s = this.searchState;
+    if (!s || !s.matches.length) return;
+    s.index = (s.index + dir + s.matches.length) % s.matches.length;
+    this.showMatch();
+  }
+
+  clearSearch() {
+    this.searchState = null;
+    this.setHighlights('search', []);
+    this.setHighlights('search-current', []);
+    this.emit('search', { search: null });
+  }
+
+  private showMatch() {
+    const s = this.searchState!;
+    const cur = s.matches[s.index];
+    if (cur) this.revealBlock(cur.block);
+    this.setHighlights('search', s.matches);
+    this.setHighlights('search-current', cur ? [cur] : []);
+    this.emit('search', { search: this.search });
   }
 
   /** Placeholder, node-selection highlight and empty-document state. */
@@ -808,9 +1188,10 @@ export class Editor {
       const b = getBlock(this.state.doc, sel.focus.block);
       const parent = locate(this.state.doc, sel.focus.block)?.parent;
       const inCell = parent ? getBlock(this.state.doc, parent)?.type === 'tableCell' : false;
-      if (b && b.type === 'paragraph' && !b.text && !inCell) {
+      if (b && isText(b) && !b.text && !inCell && b.type !== 'code') {
+        const kind = C.kindOf(b, parent ? getBlock(this.state.doc, parent) : null);
         target = this.blockElement(b.id);
-        text = this.options.placeholder;
+        text = b.type === 'paragraph' && kind !== 'quote' ? this.options.placeholder : (kind && this.options.placeholders?.[kind]) || undefined;
       }
     }
     if (target && text) {
@@ -1014,12 +1395,19 @@ export class Editor {
     }
     const collapsed = isCollapsed(this.state.selection);
     if (!this.run((tr) => C.insertText(tr, data, this.storedMarks), { mergeable: collapsed && data.length === 1 && data !== ' ' })) return;
-    if (data === '/') this.maybeOpenSlash();
+    if (data === '/') this.maybeOpenTrigger();
     const tr = this.state.tr();
-    if (runInputRules(tr, this.commandOptions)) {
+    const marker = runInputRules(tr, this.commandOptions);
+    if (marker) {
       this.closeSlash();
       this.history.seal();
-      this.dispatch(tr);
+      if (this.dispatch(tr)) {
+        const sel = this.state.selection;
+        const block = sel?.type === 'text' ? sel.focus.block : null;
+        // Backspace right away turns the block back into text with the marker (engine guide §4).
+        this.ruleArmed = block;
+        this.emit('rule', { rule: block ? { block, marker, kind: this.activeState().blockKind } : null });
+      }
       this.history.seal();
     }
   }
@@ -1044,6 +1432,10 @@ export class Editor {
         this.run((tr) => (C.deleteRange(tr, a, z), true), { mergeable: true });
         return;
       }
+    }
+    if (backward && pos.offset === 0 && this.ruleArmed === pos.block) {
+      this.undo();
+      return;
     }
     if (backward && pos.offset === 0) {
       this.run((tr) => C.joinBackward(tr), { seal: true });
@@ -1146,7 +1538,7 @@ export class Editor {
       if (top) this.rendered.delete(top.id);
     }
     this.dispatch(tr);
-    if (caretPos) this.maybeOpenSlash();
+    if (caretPos) this.maybeOpenTrigger();
   }
 
   private onKeyDown(e: KeyboardEvent) {
@@ -1163,6 +1555,11 @@ export class Editor {
 
     if (e.key === 'Escape') {
       this.emit('action', { type: 'escape' });
+      return;
+    }
+    if (mod && !e.altKey && (key === '/' || (key === 'f' && !e.shiftKey))) {
+      e.preventDefault();
+      this.emit('action', { type: key === '/' ? 'shortcuts' : 'search' });
       return;
     }
     if (!this.editable) return;
@@ -1184,6 +1581,7 @@ export class Editor {
         this.emit('action', { type: 'link' });
         return;
       }
+
       if (key === 'z' || key === 'y') {
         e.preventDefault();
         if (key === 'y' || e.shiftKey) this.redo();
@@ -1298,7 +1696,11 @@ export class Editor {
         const text = getBlock(this.state.doc, owner)?.text ?? '';
         void navigator.clipboard?.writeText(text);
         action.classList.add('bw-copied');
-        setTimeout(() => action.classList.remove('bw-copied'), 1200);
+        action.textContent = this.options.copiedLabel ?? '';
+        setTimeout(() => {
+          action.classList.remove('bw-copied');
+          action.textContent = '';
+        }, 1600);
       } else if (name === 'table-add-row' || name === 'table-add-col') {
         const table = getBlock(this.state.doc, owner);
         const rows = table?.children ?? [];
@@ -1449,10 +1851,16 @@ export class Editor {
 
   private onPaste(e: ClipboardEvent) {
     e.preventDefault();
-    if (!this.editable) return;
-    const data = e.clipboardData;
-    if (!data) return;
+    if (!this.editable || !e.clipboardData) return;
     this.syncSelection();
+    this.pasteData(e.clipboardData);
+  }
+
+  /**
+   * Inserts clipboard or drag data: Blockwell JSON first, then HTML (with Google Docs and Word
+   * rules), then Markdown-looking text, then plain text (engine guide §5).
+   */
+  pasteData(data: DataTransfer) {
     const files = Array.from(data.files ?? []);
     if (files.length && files.every((f) => f.type.startsWith('image/'))) {
       this.uploadImages(files);
@@ -1467,20 +1875,34 @@ export class Editor {
     const own = data.getData(CLIPBOARD_MIME);
     let parsed = own ? parseBlockwell(own) : null;
     const html = data.getData('text/html');
-    if (!parsed && html) parsed = parseHtml(html);
-    if (!parsed || parsed.blocks.length === 0) parsed = { blocks: C.textToBlocks(plain), report: { kept: [], unknownElements: 0, droppedAttrs: [], unsafeUrls: 0, source: 'text' } };
-    const blocks = parsed.blocks;
+    // Code editors put styled spans on the clipboard; Markdown text says more than that HTML.
+    const structured = /<(h[1-6]|ul|ol|li|table|pre|blockquote|strong|b|em|i|a|img|hr)\b/i.test(html);
+    if (!parsed && html && (structured || !looksLikeMarkdown(plain))) parsed = parseHtml(html);
+    if ((!parsed || parsed.blocks.length === 0) && looksLikeMarkdown(plain)) {
+      const md = parseMarkdown(plain);
+      parsed = { blocks: md.blocks, report: { ...emptyReport('markdown'), counts: md.counts } };
+    }
+    if (!parsed || parsed.blocks.length === 0) parsed = { blocks: C.textToBlocks(plain), report: emptyReport('text') };
+    const { blocks, report: r } = parsed;
     const ok = this.run((tr) => C.insertFragment(tr, blocks, this.commandOptions), { seal: true });
     this.history.seal();
     if (!ok) return;
     this.lastPastePlain = plain;
-    const r = parsed.report;
-    if (r.source === 'html' && (r.droppedAttrs.length || r.unknownElements || r.unsafeUrls)) this.emit('paste', { report: r });
+    const noteworthy =
+      r.source === 'gdocs' || r.source === 'word' || r.source === 'markdown' || (r.source === 'html' && (r.droppedAttrs.length > 0 || r.unknownElements > 0 || r.unsafeUrls > 0));
+    if (noteworthy) this.emit('paste', { report: r });
+    const sel = this.state.selection;
+    const block = sel?.type === 'text' ? sel.focus.block : undefined;
+    if (r.skipped) this.emit('feedback', { level: 'skip', code: 'unsupported', count: r.skipped, block });
+    if (r.issues.some((i) => i.code === 'unsafe-image')) this.emit('feedback', { level: 'reject', code: 'image-src', block });
   }
 
   private onDrop(e: DragEvent) {
-    const files = Array.from(e.dataTransfer?.files ?? []).filter((f) => f.type.startsWith('image/'));
-    if (files.length === 0) return;
+    const data = e.dataTransfer;
+    if (!data) return;
+    const hasFiles = Array.from(data.files ?? []).some((f) => f.type.startsWith('image/'));
+    const external = !hasFiles && (data.types.includes('text/html') || data.types.includes('text/plain')) && !data.types.includes(CLIPBOARD_MIME);
+    if (!hasFiles && !external) return;
     e.preventDefault();
     if (!this.editable) return;
     const doc = this.dom!.ownerDocument as Document & { caretRangeFromPoint?: (x: number, y: number) => Range | null };
@@ -1489,7 +1911,26 @@ export class Editor {
       const p = this.resolvePoint(range.startContainer, range.startOffset);
       if (p && !('node' in p)) this.setSelection(caret(p.block, p.offset), { write: false });
     }
-    this.uploadImages(files);
+    this.pasteData(data);
+  }
+}
+
+/** Highlight ranges per editor; several editors on a page share the global registry. */
+const highlightOwners = new Map<Editor, Map<string, Range[]>>();
+
+function publishHighlights(owner: Editor, ranges: Map<string, Range[]> | null) {
+  if (ranges) highlightOwners.set(owner, ranges);
+  else highlightOwners.delete(owner);
+  const registry = typeof CSS !== 'undefined' ? (CSS as unknown as { highlights?: Map<string, unknown> }).highlights : undefined;
+  const HighlightCtor = (globalThis as unknown as { Highlight?: new (...r: Range[]) => unknown }).Highlight;
+  if (!registry || !HighlightCtor) return;
+  const names = new Set<string>();
+  for (const m of highlightOwners.values()) for (const n of m.keys()) names.add(n);
+  for (const key of [...registry.keys()]) if (key.startsWith('bw-') && !names.has(key.slice(3))) registry.delete(key);
+  for (const n of names) {
+    const all: Range[] = [];
+    for (const m of highlightOwners.values()) all.push(...(m.get(n) ?? []));
+    registry.set(`bw-${n}`, new HighlightCtor(...all));
   }
 }
 

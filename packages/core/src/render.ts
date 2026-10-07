@@ -194,9 +194,10 @@ export function renderBlock(block: Block, ctx: RenderContext): HTMLElement {
       const src = String(block.attrs?.src ?? '');
       const alt = String(block.attrs?.alt ?? '');
       const width = block.attrs?.width;
-      const e = el('figure', { ...base, class: 'bw-block bw-image', contenteditable: 'false' });
+      const align = block.attrs?.align === 'left' || block.attrs?.align === 'full' ? block.attrs.align : 'center';
+      const e = el('figure', { ...base, class: `bw-block bw-image bw-image-${align}`, contenteditable: 'false' });
       const frame = el('div', { class: 'bw-image-frame' });
-      if (typeof width === 'number') frame.style.width = `${width}px`;
+      if (typeof width === 'number' && align !== 'full') frame.style.width = `${width}px`;
       const missing = () => el('span', { class: 'bw-image-missing' }, alt || 'image');
       if (isSafeUrl(src, IMAGE_SCHEMES)) {
         const img = el('img', { src, alt, draggable: 'false', loading: 'lazy' });
