@@ -6,6 +6,7 @@ import { defaultMessages, type Messages } from '../messages.js';
 import AlignMenu from './AlignMenu.vue';
 import Announcer from './Announcer.vue';
 import BlockHandles from './BlockHandles.vue';
+import BlockActionsMenu from './BlockActionsMenu.vue';
 import BlockKindMenu from './BlockKindMenu.vue';
 import BubbleMenu from './BubbleMenu.vue';
 import CodeLanguageMenu from './CodeLanguageMenu.vue';
@@ -350,6 +351,7 @@ defineExpose({ editor, submit });
     </template>
     <MentionMenu v-if="mention && mentionSearch" :query="mention.query" :search="mentionSearch" />
     <BlockKindMenu v-if="ctx.ui.popover === 'block'" />
+    <BlockActionsMenu v-if="ctx.ui.popover === 'blockActions'" :key="ctx.ui.block ?? ''" />
     <AlignMenu v-if="ctx.ui.popover === 'align'" />
     <ColorPalette v-if="ctx.ui.popover === 'color'" />
     <LinkPopover v-if="ctx.ui.popover === 'link'" />

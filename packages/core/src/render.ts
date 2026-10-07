@@ -89,10 +89,11 @@ export function renderText(container: HTMLElement, block: Block, o: RenderOption
     for (const m of active) node = wrap(node, m, o.editable);
     container.append(node);
   }
-  // A caret cannot sit in an empty line or after a trailing break without a filler.
+  // A caret cannot sit in an empty line, after a trailing break, or after a trailing mention
+  // (an uneditable inline) without a filler.
   const last = text[text.length - 1];
   const trailingBreak = last === '\n' || (last === OBJ && entities.get(text.length - 1)?.type === 'lineBreak');
-  if (text.length === 0 || trailingBreak) container.append(el('br', { 'data-bw-filler': '' }));
+  if (text.length === 0 || trailingBreak || (o.editable && last === OBJ)) container.append(el('br', { 'data-bw-filler': '' }));
 }
 
 export interface RenderContext extends RenderOptions {

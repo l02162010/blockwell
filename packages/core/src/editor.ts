@@ -2,7 +2,7 @@ import { isSafeUrl, spec, validate } from '@blockwell/schema';
 import * as C from './commands.js';
 import { blockElementOf, containerText, domToOffset, offsetToDom, textContainerOf } from './domPos.js';
 import { History } from './history.js';
-import { runInputRules } from './inputRules.js';
+import { runFenceOnEnter, runInputRules } from './inputRules.js';
 import { OBJ, marksAt, rangeHasMark, rangeMarkValue } from './marks.js';
 import {
   allBlocks,
@@ -17,6 +17,7 @@ import {
   selectionRange,
   textBlocks,
   textLength,
+  withFreshIds,
 } from './model.js';
 import { looksLikeMarkdown, parseMarkdown } from './markdown.js';
 import { CLIPBOARD_MIME, emptyReport, parseBlockwell, parseHtml, type PasteReport } from './paste.js';
@@ -58,6 +59,8 @@ export interface SlashState {
   /** Offset of the `/`. */
   from: number;
   query: string;
+  /** Opened from a button rather than typed: cancelling removes the `/` again. */
+  temporary?: boolean;
 }
 
 type TriggerKind = 'slash' | 'mention';
@@ -219,7 +222,7 @@ export class Editor {
       this.dom.classList.toggle('bw-readonly', !editable);
       this.render(true);
     }
-    this.closeSlash();
+    this.closeTrigger('slash');
     this.emit('update', { editor: this });
   }
 
@@ -495,6 +498,13 @@ export class Editor {
     return ok;
   }
 
+  /** Insert menu and slash commands: converts an empty block, or adds a `kind` block after one with text. */
+  insertKind(kind: BlockKind): boolean {
+    const ok = this.run((tr) => C.insertKind(tr, kind, this.commandOptions), { seal: true });
+    if (ok) this.emit('format', { what: kind, on: true });
+    return ok;
+  }
+
   /** Converts back to a paragraph when every selected block already has `kind`. */
   toggleBlockKind(kind: BlockKind): boolean {
     return this.activeState().blockKind === kind && kind !== 'paragraph' ? this.setBlockKind(kind === 'quote' ? 'quote' : 'paragraph') : this.setBlockKind(kind);
@@ -587,6 +597,22 @@ export class Editor {
     });
   }
 
+  /** Adds a copy of a top-level block (with new ids) right after it and puts the caret in it. */
+  duplicateBlock(block: string): boolean {
+    const loc = locate(this.state.doc, block);
+    if (!loc || loc.parent !== null) return false;
+    const copy = withFreshIds(this.state.doc.blocks[loc.index]!);
+    return this.run(
+      (tr) => {
+        tr.insertBlock(null, loc.index + 1, copy);
+        const first = textBlocks({ version: 1, blocks: [copy] })[0];
+        tr.setSelection(first ? caret(first.id, 0) : { type: 'node', block: copy.id });
+        return true;
+      },
+      { seal: true },
+    );
+  }
+
   selectNode(block: string) {
     this.setSelection({ type: 'node', block });
   }
@@ -603,12 +629,53 @@ export class Editor {
   }
 
   /** Moves a top-level block so that it ends up at `index` among the top-level blocks. */
+  /** Moves a top-level block to `index` (its index afterwards). A list item takes its nested items along. */
   moveBlock(block: string, index: number): boolean {
     const loc = locate(this.state.doc, block);
     if (!loc || loc.parent !== null) return false;
     const target = Math.max(0, Math.min(this.state.doc.blocks.length - 1, index));
     if (target === loc.index) return false;
-    return this.run((tr) => (tr.moveBlock(block, null, target), true), { seal: true });
+    return this.moveToSlot(block, target > loc.index ? target + 1 : target);
+  }
+
+  /** Moves a top-level block one place up or down, past the neighbouring block. */
+  moveBlockBy(block: string, dir: 1 | -1): boolean {
+    const loc = locate(this.state.doc, block);
+    if (!loc || loc.parent !== null) return false;
+    const n = this.blockGroup(loc.index).length;
+    return this.moveToSlot(block, dir < 0 ? loc.index - 1 : loc.index + n + 1);
+  }
+
+  /** A top-level block plus, for a list item, the items nested under it. */
+  private blockGroup(index: number): Block[] {
+    const blocks = this.state.doc.blocks;
+    const head = blocks[index]!;
+    const group = [head];
+    if (head.type === 'listItem') {
+      const indent = Number(head.attrs?.indent ?? 0);
+      for (let j = index + 1; j < blocks.length && blocks[j]!.type === 'listItem' && Number(blocks[j]!.attrs?.indent ?? 0) > indent; j++) group.push(blocks[j]!);
+    }
+    return group;
+  }
+
+  /** Moves a block's group so that it starts at insertion slot `slot` of the current list (0..length). */
+  private moveToSlot(block: string, slot: number): boolean {
+    const loc = locate(this.state.doc, block);
+    const len = this.state.doc.blocks.length;
+    if (!loc || loc.parent !== null || slot < 0 || slot > len) return false;
+    const group = this.blockGroup(loc.index);
+    if (slot >= loc.index && slot <= loc.index + group.length) return false;
+    const at = slot > loc.index ? slot - group.length : slot;
+    const sel = this.state.selection;
+    return this.run(
+      (tr) => {
+        for (const b of group) tr.removeBlock(b.id);
+        group.forEach((b, i) => tr.insertBlock(null, at + i, b));
+        if (sel) tr.setSelection(sel);
+        return true;
+      },
+      { seal: true },
+    );
   }
 
   /** Viewport rectangle of a caret at `pos` (zero width), e.g. for drawing a collaborator's cursor. */
@@ -728,7 +795,14 @@ export class Editor {
   }
 
   closeSlash() {
+    const s = this.triggers.slash;
     this.closeTrigger('slash');
+    const b = s?.temporary ? getBlock(this.state.doc, s.block) : null;
+    if (s && b && (b.text ?? '')[s.from] === '/') {
+      const sel = this.state.selection;
+      const end = sel?.type === 'text' && sel.focus.block === s.block ? Math.max(sel.focus.offset, s.from + 1) : s.from + 1 + s.query.length;
+      this.run((tr) => (tr.deleteText(s.block, s.from, end), tr.setSelection(caret(s.block, s.from)), true), { seal: true });
+    }
   }
 
   closeMention() {
@@ -775,6 +849,7 @@ export class Editor {
   startSlash() {
     if (!this.insertText('/')) return;
     this.maybeOpenTrigger();
+    if (this.triggers.slash) this.triggers.slash.temporary = true;
   }
 
   private updateTriggers() {
@@ -796,7 +871,7 @@ export class Editor {
         continue;
       }
       const query = (b.text ?? '').slice(s.from + 1, sel.focus.offset);
-      if (query.length > 32 || /[\n\uFFFC]/.test(query) || /\s{2}/.test(query) || (kind === 'mention' && /\s/.test(query))) {
+      if (query.length > 32 || /[\n\uFFFC]/.test(query) || /^\s|\s{2}/.test(query) || (kind === 'mention' && /\s/.test(query))) {
         this.closeTrigger(kind);
         continue;
       }
@@ -815,7 +890,9 @@ export class Editor {
     const at = sel.focus.offset - 1;
     const text = b.text ?? '';
     const kind = (Object.keys(TRIGGER_CHARS) as TriggerKind[]).find((k) => TRIGGER_CHARS[k] === text[at]);
-    if (!kind || (at > 0 && !/\s/.test(text[at - 1]!))) return;
+    // After a space, at a block start, or after CJK text (which has no spaces), but not inside
+    // ASCII words, numbers, URLs or e-mail addresses ("1/2", "a@b").
+    if (!kind || (at > 0 && /[\x21-\x7E]/.test(text[at - 1]!))) return;
     if (kind === 'mention' && !this.options.mentions) return;
     if (kind === 'slash' && this.commandOptions.allowedBlocks?.size === 1) return;
     this.triggers[kind] = { block: b.id, from: at, query: '' };
@@ -1111,18 +1188,40 @@ export class Editor {
   revealBlock(id: string, opts: { select?: boolean } = {}) {
     const index = this.topIndexOf(id);
     if (index === null) return;
+    if (this.virtual && this.dom && !this.blockElement(id)) {
+      // Far away and not rendered: jump to its estimated position first, so the window moves there.
+      const y = this.heightOf(0, index);
+      const sp = this.scrollParent();
+      if (sp) sp.scrollTop += this.dom.getBoundingClientRect().top - sp.getBoundingClientRect().top + y - sp.clientHeight / 2;
+      else window.scrollBy(0, this.dom.getBoundingClientRect().top + y - window.innerHeight / 2);
+    }
     this.pinned = index;
     this.render();
-    this.blockElement(id)?.scrollIntoView({ block: 'center' });
+    const el = this.blockElement(id);
+    if (el) this.scrollToElement(el);
     requestAnimationFrame(() => {
       this.render();
       this.pinned = null;
     });
     if (opts.select) {
+      // Jumping somewhere means continuing to work there: the editor takes focus.
+      if (!this.hasFocus) this.dom?.focus({ preventScroll: true });
       const b = getBlock(this.state.doc, id);
       if (b && isText(b)) this.setSelection(caret(id, 0));
       else if (b && isAtom(b)) this.setSelection({ type: 'node', block: id });
     }
+  }
+
+  /** Centres an element in the editor's own scroll area, without scrolling the page around it. */
+  private scrollToElement(el: HTMLElement) {
+    const sp = this.scrollParent();
+    if (!sp) {
+      el.scrollIntoView({ block: 'center' });
+      return;
+    }
+    const r = el.getBoundingClientRect(), v = sp.getBoundingClientRect();
+    if (r.top >= v.top + 40 && r.bottom <= v.bottom - 40) return;
+    sp.scrollTop += r.top - v.top - (v.height - Math.min(r.height, v.height)) / 2;
   }
 
   // -------------------------------------------------------------------------------------------
@@ -1153,6 +1252,14 @@ export class Editor {
     if (!s || !s.matches.length) return;
     s.index = (s.index + dir + s.matches.length) % s.matches.length;
     this.showMatch();
+  }
+
+  /** Selects the current search match, e.g. when the search bar closes. */
+  selectSearchMatch(): boolean {
+    const cur = this.searchState?.matches[this.searchState.index];
+    if (!cur || !getBlock(this.state.doc, cur.block)) return false;
+    this.setSelection({ type: 'text', anchor: { block: cur.block, offset: cur.from }, focus: { block: cur.block, offset: cur.to } });
+    return true;
   }
 
   clearSearch() {
@@ -1231,7 +1338,20 @@ export class Editor {
       domSel.addRange(r);
       return;
     }
-    const a = this.posToDom(sel.anchor), f = this.posToDom(sel.focus);
+    let a = this.posToDom(sel.anchor), f = this.posToDom(sel.focus);
+    this.modelOnly = null;
+    if ((!a || !f) && this.virtual) {
+      // Part of the selection is not rendered (select all in a large document): show the rendered
+      // part and keep the model selection as the truth until the user changes it.
+      const r = selectionRange(this.state.doc, sel);
+      const shown = Array.from(root.querySelectorAll('[data-bw-text]'));
+      const edge = (c: Element | undefined, end: boolean) => (c ? offsetToDom(c as HTMLElement, end ? containerText(c as HTMLElement).length : 0) : null);
+      const fwd = !r || (r.from.block === sel.anchor.block && r.from.offset === sel.anchor.offset);
+      a ??= edge(fwd ? shown[0] : shown.at(-1), !fwd);
+      f ??= edge(fwd ? shown.at(-1) : shown[0], fwd);
+      if (!a || !f) return;
+      this.modelOnly = { an: a.node, ao: a.offset, fn: f.node, fo: f.offset };
+    }
     if (!a || !f) return;
     if (domSel.anchorNode === a.node && domSel.anchorOffset === a.offset && domSel.focusNode === f.node && domSel.focusOffset === f.offset) return;
     try {
@@ -1305,16 +1425,29 @@ export class Editor {
     return { type: 'text', anchor: ap, focus: fp };
   }
 
+  /** The DOM selection written for a model selection the DOM cannot hold (see writeSelection). */
+  private modelOnly: { an: Node; ao: number; fn: Node; fo: number } | null = null;
+
+  private domShowsModelOnly(ds: globalThis.Selection | null): boolean {
+    const m = this.modelOnly;
+    if (!m || !ds) return false;
+    if (ds.anchorNode === m.an && ds.anchorOffset === m.ao && ds.focusNode === m.fn && ds.focusOffset === m.fo) return true;
+    this.modelOnly = null;
+    return false;
+  }
+
   private onSelectionChange() {
     if (!this.dom || this.composing || this.resizing) return;
     const ds = this.dom.ownerDocument.getSelection();
     if (!ds?.anchorNode || !this.dom.contains(ds.anchorNode)) return;
+    if (this.domShowsModelOnly(ds)) return;
     const sel = this.readSelection();
     if (!sel || sameSelection(sel, this.state.selection)) return;
     this.setSelection(sel, { write: false });
   }
 
   private syncSelection() {
+    if (this.dom && this.domShowsModelOnly(this.dom.ownerDocument.getSelection())) return;
     const sel = this.readSelection();
     if (sel && !sameSelection(sel, this.state.selection)) {
       this.state = new EditorState(this.state.doc, sel);
@@ -1344,7 +1477,9 @@ export class Editor {
       }
       case 'insertParagraph':
         e.preventDefault();
-        this.closeSlash();
+        this.closeTrigger('slash');
+        // ```js + Enter starts a code block, like ```js + Space.
+        if (this.run((tr) => runFenceOnEnter(tr, this.commandOptions), { seal: true })) return;
         this.run((tr) => C.splitBlock(tr), { seal: true });
         return;
       case 'insertLineBreak':
@@ -1404,14 +1539,22 @@ export class Editor {
     const tr = this.state.tr();
     const marker = runInputRules(tr, this.commandOptions);
     if (marker) {
-      this.closeSlash();
+      this.closeTrigger('slash');
       this.history.seal();
+      const inline = !/ $|^---$/.test(marker);
       if (this.dispatch(tr)) {
         const sel = this.state.selection;
         const block = sel?.type === 'text' ? sel.focus.block : null;
-        // Backspace right away turns the block back into text with the marker (engine guide §4).
-        this.ruleArmed = block;
-        this.emit('rule', { rule: block ? { block, marker, kind: this.activeState().blockKind } : null });
+        if (inline) {
+          // `**bold**` applies bold to what is inside; what is typed next is plain again.
+          const type = marker.endsWith('**') || marker.endsWith('__') ? 'bold' : marker.endsWith('~~') ? 'strike' : marker.endsWith('`') ? 'code' : 'italic';
+          const b = block ? getBlock(this.state.doc, block) : null;
+          if (b && sel?.type === 'text') this.storedMarks = marksAt(b.marks ?? [], sel.focus.offset).filter((m) => m.type !== type);
+        } else {
+          // Backspace right away turns the block back into text with the marker (engine guide §4).
+          this.ruleArmed = block;
+          this.emit('rule', { rule: block ? { block, marker, kind: this.activeState().blockKind } : null });
+        }
       }
       this.history.seal();
     }
@@ -1585,6 +1728,34 @@ export class Editor {
         e.preventDefault();
         this.emit('action', { type: 'link' });
         return;
+      }
+      if (this.virtual && !e.shiftKey && (key === 'a' || e.key === 'Home' || e.key === 'End')) {
+        // The browser only knows the rendered blocks; do these on the model instead.
+        const texts = textBlocks(this.state.doc);
+        const first = texts[0], last = texts.at(-1);
+        if (first && last) {
+          e.preventDefault();
+          const start = { block: first.id, offset: 0 }, end = { block: last.id, offset: textLength(last) };
+          if (key === 'a') this.setSelection({ type: 'text', anchor: start, focus: end });
+          else {
+            const pos = e.key === 'Home' ? start : end;
+            this.revealBlock(pos.block);
+            this.setSelection({ type: 'text', anchor: pos, focus: pos });
+          }
+          return;
+        }
+      }
+      if (key === 'a' && !e.shiftKey && sel?.type === 'text') {
+        // In a code block or table cell, the first Mod-A selects just that block's text.
+        const b = getBlock(this.state.doc, sel.focus.block);
+        const boxed = b && (b.type === 'code' || ancestors(this.state.doc, b.id).some((a) => a.type === 'tableCell'));
+        const len = b ? textLength(b) : 0;
+        const whole = sel.anchor.block === sel.focus.block && Math.min(sel.anchor.offset, sel.focus.offset) === 0 && Math.max(sel.anchor.offset, sel.focus.offset) === len;
+        if (boxed && len > 0 && !whole) {
+          e.preventDefault();
+          this.setSelection({ type: 'text', anchor: { block: b.id, offset: 0 }, focus: { block: b.id, offset: len } });
+          return;
+        }
       }
 
       if (key === 'z' || key === 'y') {

@@ -294,6 +294,23 @@
   font-size: 12px;
   opacity: 1;
 }
+/* A fixed width keeps the toolbar from reflowing as the caret moves between block types. */
+.bw-toolbar-page .bw-tool-kind {
+  width: 172px;
+  justify-content: flex-start;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.bw-toolbar-page .bw-tool-kind .bw-en {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.bw-toolbar-page .bw-tool-kind > .bw-icon,
+.bw-toolbar-page .bw-tool-kind > :last-child {
+  margin-left: auto;
+  flex: none;
+}
 .bw-bubble .bw-tool-kind,
 .bw-toolbar-field .bw-tool-kind {
   padding: 0 4px 0 8px;
@@ -422,8 +439,27 @@
 .bw-menu-item.bw-hover {
   background: var(--bw-hover-2);
 }
+/* The item the arrow keys are on (see Popover.vue). */
+.bw-popover .bw-kbd-active {
+  box-shadow: inset 0 0 0 2px var(--bw-accent-ring);
+}
+.bw-popover .bw-menu-item.bw-kbd-active {
+  background: var(--bw-accent-tint);
+  box-shadow: none;
+}
 .bw-menu-item.bw-current {
   background: var(--bw-hover-2);
+}
+.bw-menu-item:disabled {
+  opacity: 0.45;
+  cursor: default;
+  background: transparent;
+}
+.bw-danger-item {
+  color: var(--bw-danger);
+}
+.bw-menu-item.bw-danger-item:hover {
+  background: var(--bw-danger-hover);
 }
 .bw-menu-en {
   margin-left: auto;
@@ -640,6 +676,24 @@
   overflow: auto;
   padding: 6px;
   line-height: 1.3;
+}
+.bw-slash-filter {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 4px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--bw-line-soft);
+}
+.bw-slash-filter input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--bw-ink);
+  font: inherit;
+  font-size: 13.5px;
 }
 .bw-slash-group {
   padding: 8px 8px 4px;
@@ -1647,9 +1701,18 @@ button.bw-code-lang:hover {
   white-space: nowrap;
   border: 0;
 }
-:where(.bw-root, .bw-popover, .bw-bubble) :is(button, input, [tabindex]):focus-visible {
+:where(.bw-root, .bw-popover, .bw-bubble) :is(button, input:not([type='text']):not([type='search']):not([type='url']), [tabindex]):focus-visible {
   outline: 2px solid var(--bw-accent);
   outline-offset: 2px;
+}
+/* Text fields sit in a framed wrapper; the wrapper shows focus instead of a second ring. */
+:is(.bw-search-input, .bw-link-input, .bw-lang-search, .bw-dialog-search, .bw-sheet-search, .bw-alt-field, .bw-reply, .bw-slash-filter) input:focus {
+  outline: none;
+}
+:is(.bw-search-input, .bw-lang-search, .bw-dialog-search, .bw-sheet-search, .bw-alt-field, .bw-reply):focus-within,
+.bw-link-input:not(.bw-bad):focus-within {
+  border-color: var(--bw-accent-ring);
+  box-shadow: 0 0 0 3px var(--bw-accent-tint);
 }
 .bw-body {
   flex: 1;
@@ -2163,23 +2226,27 @@ button.bw-code-lang:hover {
   color: var(--bw-muted);
   white-space: nowrap;
 }
+/* Search uses the accent hue so it never looks like a highlight mark (which uses the palette). */
 ::highlight(bw-search) {
-  background-color: #fef9c3;
+  background-color: oklch(0.9 0.06 255);
   color: inherit;
 }
 ::highlight(bw-search-current) {
-  background-color: #fed7aa;
-  color: inherit;
+  background-color: oklch(0.62 0.15 255);
+  color: #fff;
 }
 ::highlight(bw-comment) {
   background-color: #fef9c3;
 }
-[data-theme='dark'] ::highlight(bw-search),
 [data-theme='dark'] ::highlight(bw-comment) {
   background-color: #423a0f;
 }
+[data-theme='dark'] ::highlight(bw-search) {
+  background-color: oklch(0.38 0.08 255);
+}
 [data-theme='dark'] ::highlight(bw-search-current) {
-  background-color: #7c2d12;
+  background-color: oklch(0.6 0.15 255);
+  color: #fff;
 }
 .bw-statusbar {
   display: flex;

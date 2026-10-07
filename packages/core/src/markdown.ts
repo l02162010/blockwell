@@ -29,6 +29,13 @@ const LANG_ALIASES: Record<string, string> = {
 };
 const LANGS = (spec.blocks.code!.attrs.language as { values: readonly string[] }).values;
 
+/** A fence's info string (`js`, `TS`, `c#`) as a schema code language, or null. */
+export function codeLanguage(raw: string): string | null {
+  const l = raw.trim().toLowerCase();
+  const lang = LANG_ALIASES[l] ?? l;
+  return LANGS.includes(lang) && lang !== 'plaintext' ? lang : null;
+}
+
 /** Parses CommonMark-style Markdown into schema blocks. Anything unsupported stays as text. */
 export function parseMarkdown(text: string): MarkdownResult {
   const lines = text.replace(/\r\n?/g, '\n').split('\n');
@@ -48,10 +55,9 @@ export function parseMarkdown(text: string): MarkdownResult {
       flushPara();
       const body: string[] = [];
       for (i++; i < lines.length && !/^\s*```\s*$/.test(lines[i]!); i++) body.push(lines[i]!);
-      const raw = (m[1] ?? '').toLowerCase();
-      const lang = LANG_ALIASES[raw] ?? raw;
+      const lang = codeLanguage(m[1] ?? '');
       const block: Block = { id: newId(), type: 'code', text: body.join('\n').replace(/[\u0000-\u0008\u000B-\u001F\u007F\uFFFC]/g, '') };
-      if (LANGS.includes(lang) && lang !== 'plaintext') block.attrs = { language: lang };
+      if (lang) block.attrs = { language: lang };
       blocks.push(block);
       count('code');
     } else if ((m = line.match(/^(#{1,6})\s+(.*?)\s*#*\s*$/))) {

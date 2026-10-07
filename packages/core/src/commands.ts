@@ -77,7 +77,13 @@ export function deleteSelection(tr: Tr): boolean {
   if (sel.type === 'node') return removeNode(tr, sel.block);
   const r = selectionRange(tr.doc, sel);
   if (!r || isCollapsed(sel)) return false;
+  const texts = textBlocks(tr.doc);
+  const first = texts[0], last = texts.at(-1);
+  const whole = r.from.block === first?.id && r.from.offset === 0 && r.to.block === last?.id && r.to.offset === textLength(last);
   deleteRange(tr, r.from, r.to);
+  // Clearing everything leaves a plain paragraph, not an empty copy of the first block's type.
+  const left = tr.doc.blocks.length === 1 ? tr.doc.blocks[0]! : null;
+  if (whole && left && isText(left) && left.type !== 'paragraph') toParagraph(tr, left.id);
   return true;
 }
 
@@ -253,6 +259,23 @@ export function exitBlock(tr: Tr, id: string): boolean {
   return true;
 }
 
+/**
+ * The Insert menu and slash commands: an empty text block becomes `kind`; a block with text
+ * keeps it and gets a new `kind` block after it (after the table or quote when inside one).
+ */
+export function insertKind(tr: Tr, kind: BlockKind, opts: CommandOptions): boolean {
+  const sel = tr.selection;
+  if (sel?.type !== 'text') return setBlockKind(tr, kind, opts);
+  const b = tr.block(sel.focus.block);
+  if (isText(b) && textLength(b) === 0) return setBlockKind(tr, kind, opts);
+  const top = [b, ...ancestors(tr.doc, b.id)].pop()!;
+  const loc = mustLocate(tr.doc, top.id);
+  const p = emptyParagraph();
+  tr.insertBlock(loc.parent, loc.index + 1, p);
+  tr.setSelection(caret(p.id, 0));
+  return kind === 'paragraph' || setBlockKind(tr, kind, opts);
+}
+
 export function splitBlock(tr: Tr): boolean {
   if (tr.selection?.type === 'node') {
     // Enter on a selected image or divider adds a paragraph after it.
@@ -359,6 +382,8 @@ export function joinBackward(tr: Tr): boolean {
     toParagraph(tr, b.id);
     return true;
   }
+  // A code block with content is never merged away by Backspace at its start.
+  if (spec.blocks[b.type]?.newlines) return true;
   const siblings = childrenOf(tr.doc, loc.parent);
   const parent = loc.parent ? tr.block(loc.parent) : null;
   if (loc.index === 0) {
@@ -596,14 +621,26 @@ export function indentList(tr: Tr, delta: 1 | -1): boolean {
   const items = segments(tr).map((s) => tr.block(s.block.id)).filter((b) => b.type === 'listItem');
   if (items.length === 0) return false;
   let changed = false;
+  const done = new Set<string>();
+  const level = (b: Block) => Number(b.attrs?.indent ?? 0);
   for (const item of items) {
+    if (done.has(item.id)) continue;
     const loc = mustLocate(tr.doc, item.id);
-    const prev = childrenOf(tr.doc, loc.parent)[loc.index - 1];
-    const max = prev?.type === 'listItem' ? Number(prev.attrs?.indent ?? 0) + 1 : 0;
-    const cur = Number(item.attrs?.indent ?? 0);
+    const siblings = childrenOf(tr.doc, loc.parent);
+    const prev = siblings[loc.index - 1];
+    const max = prev?.type === 'listItem' ? level(prev) + 1 : 0;
+    const cur = level(item);
     const next = Math.max(0, Math.min(6, Math.min(max, cur + delta)));
     if (next === cur) continue;
-    tr.updateAttrs(item.id, { indent: next || undefined });
+    // The items nested under this one move with it.
+    const group = [item];
+    for (let j = loc.index + 1; j < siblings.length && siblings[j]!.type === 'listItem' && level(siblings[j]!) > cur; j++) group.push(siblings[j]!);
+    for (const g of group) {
+      if (done.has(g.id)) continue;
+      done.add(g.id);
+      const n = Math.max(0, Math.min(6, level(g) + next - cur));
+      tr.updateAttrs(g.id, { indent: n || undefined });
+    }
     changed = true;
   }
   return changed;
@@ -658,7 +695,8 @@ export function insertBlock(tr: Tr, block: Block, o: CommandOptions): boolean {
   }
   if (isAtom(block)) {
     const after = childrenOf(tr.doc, parent)[index + 1];
-    if (!after || !isText(after)) tr.insertBlock(parent, index + 1, emptyParagraph());
+    // Continue in a fresh paragraph, not at the start of whatever block happens to follow.
+    if (!after || after.type !== 'paragraph' || textLength(after) > 0) tr.insertBlock(parent, index + 1, emptyParagraph());
     tr.setSelection(block.type === 'image' ? { type: 'node', block: block.id } : caret(childrenOf(tr.doc, parent)[index + 1]!.id, 0));
   } else {
     const first = textBlocks({ version: 1, blocks: [block] })[0];

@@ -24,9 +24,14 @@ const list = computed(() => {
 });
 onMounted(() => nextTick(() => input.value?.focus()));
 const choose = (lang: string) => {
-  if (ctx.ui.block) ctx.editor.value.setCodeLanguage(ctx.ui.block, lang);
+  const ed = ctx.editor.value;
+  const id = ctx.ui.block;
+  if (id) ed.setCodeLanguage(id, lang);
   ctx.close();
-  ctx.editor.value.focus();
+  // Back into the code block whose language changed, not wherever the caret was before.
+  const b = id ? getBlock(ed.getJSON(), id) : null;
+  if (b) ed.setSelection({ type: 'text', anchor: { block: b.id, offset: (b.text ?? '').length }, focus: { block: b.id, offset: (b.text ?? '').length } });
+  ed.focus();
 };
 const onKey = (e: KeyboardEvent) => {
   if (e.key === 'ArrowDown') index.value = Math.min(list.value.length - 1, index.value + 1);

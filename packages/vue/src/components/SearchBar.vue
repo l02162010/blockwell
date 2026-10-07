@@ -26,6 +26,8 @@ const onInput = () => {
   timer = window.setTimeout(() => ed().find(query.value), 120);
 };
 const close = () => {
+  // Leave the caret on what was found, so the search was worth something.
+  ed().selectSearchMatch();
   emit('close');
   ed().focus();
 };

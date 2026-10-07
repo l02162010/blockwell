@@ -60,15 +60,24 @@ export function containerLength(container: Element): number {
 export function offsetToDom(container: Element, offset: number): { node: Node; offset: number } {
   let total = 0;
   let lastText: Leaf | null = null;
+  let lastEntity: Leaf | null = null;
+  const before = (n: Node) => ({ node: n.parentNode!, offset: Array.prototype.indexOf.call(n.parentNode!.childNodes, n) as number });
   for (const l of leaves(container)) {
     if (l.kind === 'text') {
       if (offset <= total + l.len) return { node: l.node, offset: offset - total };
       lastText = l;
+      lastEntity = null;
     } else if (offset === total) {
-      const parent = l.node.parentNode!;
-      return { node: parent, offset: Array.prototype.indexOf.call(parent.childNodes, l.node) as number };
+      return before(l.node);
+    } else if (l.kind === 'entity') {
+      lastEntity = l;
     }
     total += l.len;
+  }
+  // After an entity that ends the text: right behind it, not back in the text before it.
+  if (lastEntity && offset >= total) {
+    const p = before(lastEntity.node);
+    return { node: p.node, offset: p.offset + 1 };
   }
   if (lastText && offset >= total) return { node: lastText.node, offset: lastText.len };
   return { node: container, offset: container.childNodes.length };

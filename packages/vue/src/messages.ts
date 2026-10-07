@@ -31,6 +31,7 @@ export interface Messages {
   slashGroups: { basic: [string, string]; lists: [string, string]; more: [string, string] };
   slashFooter: [string, string, string];
   slashEmpty: string;
+  insertFilter: string;
   searchLanguage: string;
   languages: Record<string, string>;
   imageFit: string;
@@ -46,6 +47,7 @@ export interface Messages {
   tableRow: { above: [string, string]; below: [string, string]; delete: [string, string] };
   addBlock: string;
   dragBlock: string;
+  blockActions: { menu: string; duplicate: string; moveUp: string; moveDown: string; delete: string };
   send: string;
   reply: string;
   mention: string;
@@ -146,6 +148,7 @@ export const defaultMessages: Messages = {
   slashGroups: { basic: ['基本', 'Basic'], lists: ['清單', 'Lists'], more: ['其他', 'More'] },
   slashFooter: ['↑↓ 選擇', '↵ 插入', 'esc 關閉'],
   slashEmpty: '沒有符合的區塊 · No matches',
+  insertFilter: '搜尋區塊 Search blocks',
   searchLanguage: '搜尋語言 Search',
   languages: {
     plaintext: '純文字 Plain',
@@ -185,7 +188,8 @@ export const defaultMessages: Messages = {
     delete: ['刪除列', 'Delete'],
   },
   addBlock: '新增區塊 Add block',
-  dragBlock: '拖曳移動 Drag to move',
+  dragBlock: '拖曳移動，點一下開啟選單 Drag to move, click for menu',
+  blockActions: { menu: '區塊選單 Block menu', duplicate: '複製 Duplicate', moveUp: '上移 Move up', moveDown: '下移 Move down', delete: '刪除 Delete' },
   send: '傳送',
   reply: '回覆… Reply',
   mention: '提及 Mention',

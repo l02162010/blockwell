@@ -59,7 +59,7 @@ export function useEditorState(editor: Ref<Editor | null>) {
   return { active, version, refresh };
 }
 
-export type PopoverKind = 'block' | 'align' | 'color' | 'link' | 'codeLanguage' | 'tableColumn' | 'tableRow' | 'imageAlt' | 'insert' | null;
+export type PopoverKind = 'block' | 'align' | 'color' | 'link' | 'codeLanguage' | 'tableColumn' | 'tableRow' | 'imageAlt' | 'insert' | 'blockActions' | null;
 
 export interface UiState {
   popover: PopoverKind;
@@ -148,10 +148,12 @@ export function useFloating(
 ) {
   // Hidden with opacity rather than `visibility`, so inputs inside can take focus before placement.
   const style = reactive({ top: '0px', left: '0px', opacity: '0', pointerEvents: 'none' as 'none' | 'auto' });
+  let side: 'top' | 'bottom' | null = null;
   const place = () => {
     const r = anchor();
     const e = el.value;
     if (!r || !e) {
+      side = null;
       style.opacity = '0';
       style.pointerEvents = 'none';
       return;
@@ -159,9 +161,13 @@ export function useFloating(
     const w = e.offsetWidth, h = e.offsetHeight;
     const gap = opts.offset ?? 8;
     const vw = window.innerWidth, vh = window.visualViewport?.height ?? window.innerHeight;
-    let top = opts.placement === 'top' ? r.top - h - gap : r.bottom + gap;
-    if (opts.placement === 'top' && top < 8) top = r.bottom + gap;
-    else if (opts.placement !== 'top' && top + h > vh - 8 && r.top - h - gap > 8) top = r.top - h - gap;
+    // Pick a side once and keep it, so a menu that shrinks as you filter it stays against its anchor.
+    if (!side) {
+      side = opts.placement === 'top' ? 'top' : 'bottom';
+      if (side === 'top' && r.top - h - gap < 8) side = 'bottom';
+      else if (side === 'bottom' && r.bottom + gap + h > vh - 8 && r.top - h - gap > 8) side = 'top';
+    }
+    const top = side === 'top' ? r.top - h - gap : r.bottom + gap;
     let left = opts.align === 'center' ? r.left + r.width / 2 - w / 2 : r.left - 8;
     left = Math.max(8, Math.min(left, vw - w - 8));
     style.top = `${Math.round(top)}px`;
@@ -174,7 +180,26 @@ export function useFloating(
     cancelAnimationFrame(raf);
     raf = requestAnimationFrame(place);
   };
-  watch([deps, el], schedule, { flush: 'post' });
+  watch(
+    deps,
+    () => {
+      side = null;
+      schedule();
+    },
+    { flush: 'post' },
+  );
+  // A new element (reopened) or a different size (filtered list) needs placing again.
+  let ro: ResizeObserver | null = null;
+  watch(
+    el,
+    (e) => {
+      side = null;
+      ro?.disconnect();
+      if (e && typeof ResizeObserver !== 'undefined') (ro = new ResizeObserver(schedule)).observe(e);
+      schedule();
+    },
+    { flush: 'post' },
+  );
   onMounted(() => {
     window.addEventListener('scroll', schedule, true);
     window.addEventListener('resize', schedule);
@@ -183,6 +208,7 @@ export function useFloating(
   });
   onBeforeUnmount(() => {
     cancelAnimationFrame(raf);
+    ro?.disconnect();
     window.removeEventListener('scroll', schedule, true);
     window.removeEventListener('resize', schedule);
     window.visualViewport?.removeEventListener('resize', schedule);
