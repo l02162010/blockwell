@@ -47,6 +47,12 @@ const close = () => {
   ed().focus();
 };
 const onKey = (e: KeyboardEvent) => {
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'f') {
+    // ⌘F again (not the browser's find): select the query to type a new one.
+    e.preventDefault();
+    input.value?.select();
+    return;
+  }
   if (e.key === 'Enter') {
     e.preventDefault();
     if (state.value?.query !== query.value) ed().find(query.value);

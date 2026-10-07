@@ -199,3 +199,46 @@ test('a bare domain becomes an https link', async ({ page }) => {
   await input.press('Enter');
   await expect(ed(page).locator('a[href="https://example.com"]')).toHaveCount(1);
 });
+
+test('ArrowDown in the last table row selects the image below', async ({ page }) => {
+  const cell = ed(page).locator('td [data-bw-text]', { hasText: /^Android$/ });
+  await cell.scrollIntoViewIfNeeded();
+  await cell.click();
+  await page.keyboard.press('ArrowDown');
+  expect(await page.evaluate(() => (window as unknown as { __editor: { selection: { type: string } } }).__editor.selection.type)).toBe('node');
+});
+
+test('+ then Escape leaves the document as it was', async ({ page }) => {
+  const before = (await json(page)).length;
+  const p = ed(page).locator('[data-bw-text]', { hasText: '完整規格見' }).first();
+  await p.scrollIntoViewIfNeeded();
+  await p.hover();
+  await page.locator('.bw-handles .bw-handle').first().click();
+  await expect(page.locator('.bw-slash')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.bw-slash')).toHaveCount(0);
+  expect((await json(page)).length).toBe(before);
+});
+
+test('restoring a version can be undone', async ({ page }) => {
+  await page.locator('.switch-group').getByRole('button', { name: '版本' }).click();
+  await page.getByRole('option', { name: /昨天 18:20/ }).click();
+  await page.getByRole('button', { name: /還原此版本/ }).click();
+  await expect.poll(async () => (await json(page)).map(textOf)).toContain('我們以 JSON 為主，畫面只是它的投影。');
+  await page.keyboard.press(`${mod}+z`);
+  await expect.poll(async () => (await json(page)).map(textOf)).toContain('JSON 是唯一真相：DOM 和 HTML 都只是衍生物，可以隨時從 JSON 重建。');
+});
+
+test('Escape cancels a drag', async ({ page }) => {
+  const p = ed(page).locator('[data-bw-text]', { hasText: '完整規格見' }).first();
+  await p.scrollIntoViewIfNeeded();
+  await p.hover();
+  const grip = (await page.locator('.bw-handles .bw-grab').boundingBox())!;
+  const before = (await json(page)).map(textOf);
+  await page.mouse.move(grip.x + 5, grip.y + 5);
+  await page.mouse.down();
+  await page.mouse.move(grip.x + 5, grip.y - 200, { steps: 8 });
+  await page.keyboard.press('Escape');
+  await page.mouse.up();
+  expect((await json(page)).map(textOf)).toEqual(before);
+});

@@ -58,8 +58,12 @@ watch(follow, (on) => {
   if (on && chen) jump(chen);
 });
 const jump = (p: Person) => {
-  const id = p.id === 'u_chen' ? quote.value?.id : ime.value?.id;
-  if (id) editor.value?.revealBlock(id, { select: true });
+  // To the collaborator's caret, not just their block.
+  const c = cursors.value.find((x) => x.name === p.name) ?? null;
+  const id = c?.pos.block ?? (p.id === 'u_chen' ? quote.value?.id : ime.value?.id);
+  if (!id) return;
+  editor.value?.revealBlock(id, { select: true });
+  if (c) editor.value?.setSelection({ type: 'text', anchor: c.pos, focus: c.pos });
 };
 
 // Comments are anchored to a block and a range; the editor only paints them. The host app
@@ -93,11 +97,13 @@ watch(
   { immediate: true },
 );
 const open = computed(() => threads.value.filter((t) => !t.resolved && getBlock(doc.value, t.block)));
+const written = computed(() => open.value.filter((t) => t.messages.length));
 const thread = computed(() => open.value.find((t) => t.id === active.value) ?? null);
 const topOf = (id: string) => [id, ...ancestors(doc.value, id).map((b) => b.id)].pop()!;
 const commentCounts = computed(() => {
   const counts: Record<string, number> = {};
-  for (const t of open.value) counts[topOf(t.block)] = (counts[topOf(t.block)] ?? 0) + Math.max(1, t.messages.length);
+  // A draft nobody wrote in yet is not a comment.
+  for (const t of open.value) if (t.messages.length) counts[topOf(t.block)] = (counts[topOf(t.block)] ?? 0) + t.messages.length;
   return counts;
 });
 const highlights = computed((): Record<string, HighlightRange[]> => {
@@ -121,7 +127,7 @@ const newThread = () => {
   showThread(t);
 };
 const openThreadAt = (block: string) => showThread(open.value.find((t) => topOf(t.block) === block));
-const toggleComments = () => (panel.value === 'comments' ? showThread(undefined) : showThread(open.value[0]));
+const toggleComments = () => (panel.value === 'comments' ? showThread(undefined) : showThread(written.value[0]));
 const openShortcuts = () => editor.value?.dom?.dispatchEvent(new KeyboardEvent('keydown', { key: '/', metaKey: true, ctrlKey: true, bubbles: true }));
 const reply = (text: string) => {
   const t = thread.value;
@@ -150,14 +156,18 @@ const selectedVersion = ref<string | null>('v4');
 const diffBase = computed(() => (panel.value === 'history' && selectedVersion.value ? (snapshots[selectedVersion.value] ?? null) : null));
 const restore = (id: string) => {
   const snap = snapshots[id];
-  if (!snap) return;
-  doc.value = structuredClone(snap);
+  const ed = editor.value;
+  if (!snap || !ed) return;
+  // The state before the restore stays in the list, and the restore itself can be undone.
+  snapshots.before = structuredClone(ed.getJSON());
+  panel.value = null;
+  selectedVersion.value = 'now';
   versions.value = [
     { ...versions.value[0]!, what: `已還原 ${versions.value.find((v) => v.id === id)?.time}` },
-    ...versions.value.slice(1),
+    { id: 'before', time: '剛剛', who: '林雅婷', what: '還原前的版本' },
+    ...versions.value.slice(1).filter((v) => v.id !== 'before'),
   ];
-  selectedVersion.value = 'now';
-  panel.value = null;
+  requestAnimationFrame(() => ed.replaceContent(structuredClone(snap)));
 };
 
 // The server's validator answers with a JSON pointer; in this demo it rejects the link paragraph.
@@ -178,7 +188,7 @@ const status = computed(() => (system.value === 'error' ? 'error' : system.value
         <div class="switch-group">
           <span>協作</span>
           <label><input v-model="collab" type="checkbox" /> 協作游標</label>
-          <button type="button" :class="{ on: panel === 'comments' }" :disabled="!open.length && panel !== 'comments'" :title="open.length ? '' : '沒有未解決的留言；選取文字後按浮動列的留言新增'" @click="toggleComments">留言 {{ open.length || '' }}</button>
+          <button type="button" :class="{ on: panel === 'comments' }" :disabled="!written.length && panel !== 'comments'" :title="written.length ? '' : '沒有未解決的留言；選取文字後按浮動列的留言新增'" @click="toggleComments">留言 {{ written.length || '' }}</button>
           <button type="button" :class="{ on: panel === 'history' }" @click="panel = panel === 'history' ? null : 'history'">版本</button>
         </div>
         <div class="switch-group">
@@ -222,7 +232,7 @@ const status = computed(() => (system.value === 'error' ? 'error' : system.value
           <div class="doc-meta">林雅婷 · 10 分鐘前編輯</div>
         </template>
         <template #aside>
-          <CommentsPanel v-if="panel === 'comments' && thread" :key="thread.id" :thread="thread" @reply="reply" @resolve="resolve" @close="showThread(undefined)" />
+          <CommentsPanel v-if="panel === 'comments' && thread" :key="thread.id" :thread="thread" @reply="reply" @resolve="resolve" @close="(showThread(undefined), editor?.focus())" />
           <HistoryPanel
             v-else-if="panel === 'history'"
             :versions="versions"

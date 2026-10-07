@@ -144,3 +144,11 @@ describe('convertHtml details', () => {
     expect(doc.blocks[0]).toMatchObject({ type: 'code', attrs: { language: 'javascript' }, text: 'let a = 1;' });
   });
 });
+
+describe('palette names in pasted HTML', () => {
+  it('keeps <font color="red"> as the red token', () => {
+    const { doc, report } = convertHtml('<p><font color="red">紅</font>字</p>');
+    expect(doc.blocks[0]!.marks).toEqual([{ type: 'color', from: 0, to: 1, attrs: { value: 'red' } }]);
+    expect(report.issues).toEqual([]);
+  });
+});

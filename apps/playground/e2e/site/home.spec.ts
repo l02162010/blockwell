@@ -135,3 +135,38 @@ test('the demo toolbar stays in view while the document scrolls', async ({ page 
   for (let i = 0; i < 30; i++) await page.keyboard.press('Enter');
   await expect(page.locator('.demo-editor .bw-toolbar-page')).toBeInViewport();
 });
+
+test('ArrowDown at the end of the last code block leaves it', async ({ page }) => {
+  await editor(page).locator('.bw-code [data-bw-text]').click();
+  await page.keyboard.press('Control+End');
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.type('Z');
+  await expect(editor(page).locator(':scope > p').last()).toHaveText('Z');
+});
+
+test('the demo editor scrolls inside its box', async ({ page }) => {
+  await editor(page).locator('h2').click();
+  await page.keyboard.press('Control+End');
+  for (let i = 0; i < 25; i++) await page.keyboard.press('Enter');
+  await page.keyboard.type('最後');
+  const grid = (await page.locator('.demo-grid').boundingBox())!;
+  const ed = (await page.locator('.demo-editor').boundingBox())!;
+  expect(ed.height).toBeLessThanOrEqual(grid.height + 1);
+  // The caret's line is visible inside the editor's own scroll area.
+  const inside = await page.evaluate(() => {
+    const p = [...document.querySelectorAll('.demo-editor .bw-editor > p')].find((x) => x.textContent === '最後')!;
+    const r = p.getBoundingClientRect(), v = document.querySelector('.demo-editor .bw-scroll')!.getBoundingClientRect();
+    return r.top >= v.top - 1 && r.bottom <= v.bottom + 1;
+  });
+  expect(inside).toBe(true);
+});
+
+test('phone: Escape and taps outside close the menu', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole('button', { name: /選單/ }).click();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.nav-sheet')).toHaveCount(0);
+  await page.getByRole('button', { name: /選單/ }).click();
+  await page.mouse.click(200, 700);
+  await expect(page.locator('.nav-sheet')).toHaveCount(0);
+});

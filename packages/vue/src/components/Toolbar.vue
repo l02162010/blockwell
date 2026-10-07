@@ -12,8 +12,8 @@ import ToolButton from './ToolButton.vue';
  * `comment`: inline marks only. `mobile`: one row of 44px buttons above the keyboard, which
  * turns into a format row while text is selected and a table bar inside tables.
  */
-const props = defineProps<{ variant: 'page' | 'field' | 'comment' | 'mobile' }>();
-const emit = defineEmits<{ mention: [] }>();
+const props = defineProps<{ variant: 'page' | 'field' | 'comment' | 'mobile'; comments?: boolean }>();
+const emit = defineEmits<{ mention: []; comment: [] }>();
 const ctx = useBlockwell();
 const { editor, active, messages: m } = ctx;
 
@@ -153,6 +153,7 @@ const onKey = (e: KeyboardEvent) => {
       <ToolButton size="lg" icon="code" :label="m.code" :active="a?.marks.code" @click="ed().toggleMark('code')" />
       <ToolButton size="lg" icon="format_color_text" :label="m.color" :disabled="inCode" @click="openFrom('color', $event)" />
       <ToolButton size="lg" icon="link" :label="m.link" :active="!!a?.link" :disabled="inCode" @click="openFrom('link', $event)" />
+      <ToolButton v-if="comments" size="lg" icon="add_comment" label="留言 Comment" @click="emit('comment')" />
     </template>
 
     <template v-else-if="mobileMode === 'table'">

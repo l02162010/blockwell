@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { emptyParagraphAfter } from '../helpers.js';
+import { getBlock } from '@blockwell/core';
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useBlockwell, visibleRect } from '../composables.js';
 import BwIcon from './BwIcon.vue';
@@ -69,8 +69,12 @@ const add = () => {
   const id = hovered.value?.id;
   if (!id) return;
   ed().focus();
-  emptyParagraphAfter(ed(), id);
-  ed().startSlash();
+  const b = getBlock(ed().getJSON(), id);
+  // An empty paragraph takes the menu itself; otherwise a new line is added for it.
+  if (b?.type === 'paragraph' && !b.text) {
+    ed().setSelection({ type: 'text', anchor: { block: id, offset: 0 }, focus: { block: id, offset: 0 } });
+    ed().startSlash();
+  } else ed().insertSlashAfter(id);
 };
 
 /** The menu hangs off the block's gutter, which stays put even when the handles hide. */
@@ -137,6 +141,7 @@ const startDrag = (e: PointerEvent) => {
   const up = () => {
     window.removeEventListener('pointermove', move);
     window.removeEventListener('pointerup', up);
+    window.removeEventListener('keydown', cancel, true);
     const d = dragging;
     dragging = null;
     drop.value = null;
@@ -154,8 +159,17 @@ const startDrag = (e: PointerEvent) => {
     // Keep working where the block went.
     ed().revealBlock(d.id, { select: true });
   };
+  // Escape drops the drag where it started.
+  const cancel = (ev: KeyboardEvent) => {
+    if (ev.key !== 'Escape' || !dragging) return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    dragging = null;
+    up();
+  };
   window.addEventListener('pointermove', move);
   window.addEventListener('pointerup', up);
+  window.addEventListener('keydown', cancel, true);
 };
 </script>
 

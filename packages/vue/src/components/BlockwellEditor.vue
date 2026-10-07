@@ -349,7 +349,7 @@ defineExpose({ editor, submit });
       :class="{ 'bw-mobile-inline': layout === 'mobile' }"
       :style="layout === 'mobile' ? undefined : { bottom: `${keyboardOffset}px` }"
     >
-      <Toolbar variant="mobile" />
+      <Toolbar variant="mobile" :comments="comments" @comment="emit('comment')" />
     </div>
 
     <!-- Floating UI -->

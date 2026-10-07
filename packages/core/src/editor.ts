@@ -61,6 +61,8 @@ export interface SlashState {
   query: string;
   /** Opened from a button rather than typed: cancelling removes the `/` again. */
   temporary?: boolean;
+  /** The block was created for this menu (the + handle): cancelling undoes its creation. */
+  owned?: boolean;
 }
 
 type TriggerKind = 'slash' | 'mention';
@@ -198,6 +200,24 @@ export class Editor {
     return this.state.doc;
   }
 
+  /** Replaces the whole document as one undoable edit (e.g. restoring an older version). */
+  replaceContent(doc: Doc): boolean {
+    if (!validate(doc).ok || doc.blocks.length === 0) return false;
+    const blocks = doc.blocks;
+    const ok = this.run(
+      (tr) => {
+        for (const b of [...tr.doc.blocks]) tr.removeBlock(b.id);
+        blocks.forEach((b, i) => tr.insertBlock(null, i, b));
+        const first = textBlocks(tr.doc)[0];
+        tr.setSelection(first ? caret(first.id, 0) : null);
+        return true;
+      },
+      { seal: true },
+    );
+    if (ok && this.dom) this.focus();
+    return ok;
+  }
+
   /** Replaces the document, e.g. when the bound value changes from outside. Invalid documents are refused. */
   setDoc(doc: Doc, { keepHistory = false } = {}): boolean {
     if (!validate(doc).ok) return false;
@@ -255,6 +275,11 @@ export class Editor {
     // Record first: listeners of the update event read canUndo.
     this.history.record(res.tr);
     this.apply(res.state, res.tr);
+    // The browser's own input is cancelled, so it no longer keeps the caret in view: we do.
+    if (this.hasFocus) {
+      cancelAnimationFrame(this.caretFrame);
+      this.caretFrame = requestAnimationFrame(() => this.scrollCaretIntoView());
+    }
     if (tr.dropped) this.emit('feedback', { level: 'adjust', code: 'length', block: tr.dropped.block, count: tr.dropped.text.length, rest: tr.dropped.text });
     return true;
   }
@@ -328,11 +353,14 @@ export class Editor {
 
   /** Scrolls the editor (or the page) just enough to show the caret. */
   scrollCaretIntoView() {
-    const r = this.selectionRect();
-    if (!r || !this.dom) return;
+    const sel = this.state.selection;
+    if (!this.dom || !sel) return;
+    // The caret (the focus end of a range), not the whole selected range.
+    const r = sel.type === 'text' ? this.rectAt(sel.focus) : this.selectionRect();
+    if (!r) return;
     const sp = this.scrollParent();
     const v = sp ? sp.getBoundingClientRect() : new DOMRect(0, 0, window.innerWidth, window.innerHeight);
-    const margin = 48;
+    const margin = Math.min(48, v.height / 4);
     const dy = r.bottom > v.bottom - margin ? r.bottom - v.bottom + margin : r.top < v.top + margin ? r.top - v.top - margin : 0;
     if (!dy) return;
     if (sp) sp.scrollTop += dy;
@@ -818,6 +846,11 @@ export class Editor {
   closeSlash() {
     const s = this.triggers.slash;
     this.closeTrigger('slash');
+    if (s?.owned && !s.query) {
+      // Nothing was chosen: as if + had never been clicked.
+      this.undo();
+      return;
+    }
     const b = s?.temporary ? getBlock(this.state.doc, s.block) : null;
     if (s && b && (b.text ?? '')[s.from] === '/') {
       const sel = this.state.selection;
@@ -876,6 +909,26 @@ export class Editor {
     if (prev && /[\x21-\x7E]/.test(prev)) this.insertText(' ');
     if (!this.insertText('@')) return;
     this.maybeOpenTrigger();
+  }
+
+  /** The + handle: a new line after `block` with the slash menu open on it, in one undo step. */
+  insertSlashAfter(block: string): boolean {
+    const loc = locate(this.state.doc, block);
+    if (!loc) return false;
+    const id = newId();
+    const ok = this.run(
+      (tr) => {
+        tr.insertBlock(loc.parent, loc.index + 1, { id, type: 'paragraph', text: '/' });
+        tr.setSelection(caret(id, 1));
+        return true;
+      },
+      { seal: true },
+    );
+    if (!ok) return false;
+    if (!this.hasFocus) this.focus();
+    this.maybeOpenTrigger();
+    if (this.triggers.slash) Object.assign(this.triggers.slash, { temporary: true, owned: true });
+    return true;
   }
 
   /** Types `/` at the caret and opens the slash menu, as if the user had typed it. */
@@ -1112,6 +1165,7 @@ export class Editor {
   private printing = false;
   private pinned: number | null = null;
   private measureFrame = 0;
+  private caretFrame = 0;
   private scrollFrame = 0;
 
   /** True while only part of the document is in the DOM. */
@@ -1888,11 +1942,19 @@ export class Editor {
             this.setSelection(caret(target.id, down ? 0 : textLength(target)));
             return;
           }
-          if (down && top === this.state.doc.blocks.at(-1)) {
-            e.preventDefault();
-            this.run((tr) => C.exitBlock(tr, b.id), { seal: true });
-            return;
+          // Past the last (or first) row: on to the block after (or before) the table.
+          const all = this.state.doc.blocks;
+          const beside = all[all.indexOf(top) + (down ? 1 : -1)];
+          e.preventDefault();
+          if (!beside) {
+            if (down) this.run((tr) => C.exitBlock(tr, b.id), { seal: true });
+          } else if (isAtom(beside)) this.setSelection({ type: 'node', block: beside.id });
+          else {
+            const texts = textBlocks({ version: 1, blocks: [beside] });
+            const t = down ? texts[0] : texts.at(-1);
+            if (t) this.setSelection(caret(t.id, down ? 0 : textLength(t)));
           }
+          return;
         }
       }
       if (inBox && (e.key === 'ArrowDown' || e.key === 'ArrowRight') && !e.shiftKey && !mod && top === this.state.doc.blocks.at(-1) && this.atDocEnd(b!, sel.focus.offset, e.key)) {
@@ -1937,25 +1999,24 @@ export class Editor {
     else this.run((tr) => C.exitBlock(tr, last.id), { seal: true });
   }
 
-  /** Whether the caret is on the first (`down` false) or last visual line of its text. */
+  /**
+   * Whether the caret is on the first (`down` false) or last visual line of its text: its line is
+   * the line of the text's start (or end). Comparing with the block's box fails with padding.
+   */
   private onEdgeLine(b: Block, offset: number, down: boolean): boolean {
     const text = b.text ?? '';
     if (down ? text.slice(offset).includes('\n') : text.slice(0, offset).includes('\n')) return false;
     const c = this.rectAt({ block: b.id, offset });
-    const box = this.blockElement(b.id)?.querySelector('[data-bw-text]')?.getBoundingClientRect() ?? this.blockElement(b.id)?.getBoundingClientRect();
-    if (!c || !box) return true;
-    return down ? c.bottom > box.bottom - c.height : c.top < box.top + c.height;
+    const edge = this.rectAt({ block: b.id, offset: down ? textLength(b) : 0 });
+    if (!c || !edge) return true;
+    return Math.abs(c.top - edge.top) < Math.max(4, c.height / 2);
   }
 
   /** Whether the caret is on the last visual line of the last text block (any column for ArrowDown). */
   private atDocEnd(b: Block, offset: number, key: string): boolean {
     if (textBlocks(this.state.doc).at(-1)?.id !== b.id) return false;
-    const text = b.text ?? '';
     if (key === 'ArrowRight') return offset === textLength(b);
-    if (text.slice(offset).includes('\n')) return false;
-    const caretRect = this.rectAt({ block: b.id, offset });
-    const blockRect = this.blockElement(b.id)?.querySelector('[data-bw-text]')?.getBoundingClientRect();
-    return !caretRect || !blockRect || caretRect.bottom > blockRect.bottom - caretRect.height;
+    return this.onEdgeLine(b, offset, true);
   }
 
   private moveCell(block: string, delta: 1 | -1) {

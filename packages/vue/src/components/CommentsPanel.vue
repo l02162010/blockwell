@@ -49,7 +49,7 @@ const send = () => {
         </div>
       </div>
       <form class="bw-reply" @submit.prevent="send">
-        <input ref="input" v-model="draft" type="text" :placeholder="thread.messages.length ? m.comments.reply : m.comments.first" :aria-label="m.comments.reply" />
+        <input ref="input" v-model="draft" @keydown.esc.prevent="emit('close')" @keydown.enter.ctrl.prevent="send" @keydown.enter.meta.prevent="send" type="text" :placeholder="thread.messages.length ? m.comments.reply : m.comments.first" :aria-label="m.comments.reply" />
         <button type="submit" class="bw-mini" :disabled="!draft.trim()" aria-label="Send"><BwIcon name="send" :size="18" /></button>
       </form>
     </div>

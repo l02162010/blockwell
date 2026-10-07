@@ -56,7 +56,7 @@ kbd {
   align-items: center;
   gap: 24px;
   padding: 12px max(var(--gutter), calc((100vw - var(--max)) / 2));
-  background: color-mix(in oklch, var(--bw-page) 82%, transparent);
+  background: color-mix(in oklch, var(--bw-page) 94%, transparent);
   backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--bw-line-soft);
 }
@@ -590,9 +590,18 @@ kbd {
 /* The live demo has a fixed height: the toolbar stays in view and the editor scrolls inside. */
 .demo-grid {
   height: min(620px, calc(100vh - 140px));
+  /* One row that may shrink: each pane scrolls inside the box instead of overflowing it. */
+  grid-template-rows: minmax(0, 1fr);
+}
+.demo-editor {
+  min-height: 0;
+  overflow: hidden;
 }
 .demo-editor .bw-root {
   height: 100%;
+}
+.demo-json .json {
+  overflow: auto;
 }
 .demo-json {
   min-height: 0;

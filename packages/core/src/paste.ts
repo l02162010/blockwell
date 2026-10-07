@@ -213,7 +213,13 @@ export function parseHtml(html: string, parser: DOMParser = new DOMParser()): Pa
     // Word list markers ("1." / "·") are separate spans; the list item carries the numbering.
     if (source === 'word' && /mso-list:\s*ignore/i.test(style)) return;
     noteAttrs(el);
-    if (el.getAttribute('color') || /(^|;)\s*color\s*:/i.test(style)) {
+    // A colour that is itself a palette name (<font color="red">) is kept as that token.
+    const named = (el.getAttribute('color') ?? /(?:^|;)\s*color\s*:\s*([a-z]+)\s*(?:;|$)/i.exec(style)?.[1] ?? '').trim().toLowerCase();
+    const token = (spec.palette as readonly string[]).includes(named) ? named : null;
+    if (token) {
+      kept.add('color');
+      active = [...active.filter((m) => m.type !== 'color'), { type: 'color', from: 0, to: 0, attrs: { value: token } }];
+    } else if (el.getAttribute('color') || /(^|;)\s*color\s*:/i.test(style)) {
       // Google Docs colours every link; only an explicit colour elsewhere counts.
       if (source !== 'gdocs' || !el.closest('a')) removed.add('color');
       if (source === 'html') issue('color-dropped');

@@ -12,7 +12,8 @@ describe('parseHtml', () => {
   it('maps headings, marks and links to the schema', () => {
     const { blocks, report } = parseHtml('<h2 style="color:red" class="x">Title</h2><p><b>Bold</b> and <a href="https://a.b/c" onclick="x()">link</a></p>');
     expect(strip(blocks)).toEqual([
-      { type: 'heading', attrs: { level: 2 }, text: 'Title' },
+      // "red" is a palette name, so it stays as the red token.
+      { type: 'heading', attrs: { level: 2 }, text: 'Title', marks: [{ type: 'color', from: 0, to: 5, attrs: { value: 'red' } }] },
       {
         type: 'paragraph',
         text: 'Bold and link',
@@ -22,7 +23,7 @@ describe('parseHtml', () => {
         ],
       },
     ]);
-    expect(report.kept.sort()).toEqual(['bold', 'heading', 'link']);
+    expect(report.kept.sort()).toEqual(['bold', 'color', 'heading', 'link']);
     expect(report.droppedAttrs.sort()).toEqual(['class', 'on*', 'style']);
   });
 

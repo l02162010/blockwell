@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { convertHtml, type Doc } from '@blockwell/core';
 import { BlockwellEditor, kbd } from '@blockwell/vue';
-import { computed, ref, shallowRef, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
 import palette from '../../../spec/palette.json';
 import JsonView from './JsonView.vue';
 import { heroDoc, nastyHtml, server, usage } from './content';
@@ -50,6 +50,19 @@ const tryIt = (e: MouseEvent) => {
   setTimeout(() => editorRef.value?.editor.focusEnd(), 350);
 };
 const menuOpen = ref(false);
+// The phone menu closes on Escape and on any tap outside it.
+const closeMenu = (e: Event) => {
+  if (!menuOpen.value) return;
+  if (e instanceof KeyboardEvent ? e.key === 'Escape' : !(e.target as Element).closest?.('.nav-sheet, .nav-menu-btn')) menuOpen.value = false;
+};
+onMounted(() => {
+  document.addEventListener('keydown', closeMenu);
+  document.addEventListener('pointerdown', closeMenu, true);
+});
+onBeforeUnmount(() => {
+  document.removeEventListener('keydown', closeMenu);
+  document.removeEventListener('pointerdown', closeMenu, true);
+});
 
 const tokens = Object.keys(palette.tokens);
 
