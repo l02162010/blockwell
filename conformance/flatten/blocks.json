@@ -1,0 +1,76 @@
+{
+  "cases": [
+    {
+      "name": "heading and list attributes get defaults",
+      "doc": { "version": 1, "blocks": [
+        { "id": "h", "type": "heading", "attrs": { "level": 1, "align": "center" }, "text": "T" },
+        { "id": "a", "type": "listItem", "attrs": { "style": "bullet" }, "text": "a" },
+        { "id": "b", "type": "listItem", "attrs": { "style": "todo", "checked": true }, "text": "b" }
+      ] },
+      "expected": [
+        { "type": "heading", "level": 1, "align": "center", "runs": [ { "text": "T" } ] },
+        { "type": "listItem", "style": "bullet", "indent": 0, "checked": false, "runs": [ { "text": "a" } ] },
+        { "type": "listItem", "style": "todo", "indent": 0, "checked": true, "runs": [ { "text": "b" } ] }
+      ]
+    },
+    {
+      "name": "ordered numbering with nesting",
+      "doc": { "version": 1, "blocks": [
+        { "id": "a", "type": "listItem", "attrs": { "style": "ordered" }, "text": "a" },
+        { "id": "b", "type": "listItem", "attrs": { "style": "ordered", "indent": 1 }, "text": "b" },
+        { "id": "c", "type": "listItem", "attrs": { "style": "ordered", "indent": 1 }, "text": "c" },
+        { "id": "d", "type": "listItem", "attrs": { "style": "ordered" }, "text": "d" },
+        { "id": "e", "type": "listItem", "attrs": { "style": "ordered", "indent": 1 }, "text": "e" }
+      ] },
+      "expected": [
+        { "type": "listItem", "style": "ordered", "indent": 0, "checked": false, "number": 1, "runs": [ { "text": "a" } ] },
+        { "type": "listItem", "style": "ordered", "indent": 1, "checked": false, "number": 1, "runs": [ { "text": "b" } ] },
+        { "type": "listItem", "style": "ordered", "indent": 1, "checked": false, "number": 2, "runs": [ { "text": "c" } ] },
+        { "type": "listItem", "style": "ordered", "indent": 0, "checked": false, "number": 2, "runs": [ { "text": "d" } ] },
+        { "type": "listItem", "style": "ordered", "indent": 1, "checked": false, "number": 1, "runs": [ { "text": "e" } ] }
+      ]
+    },
+    {
+      "name": "numbering restarts after a paragraph or a style change",
+      "doc": { "version": 1, "blocks": [
+        { "id": "a", "type": "listItem", "attrs": { "style": "ordered" }, "text": "a" },
+        { "id": "b", "type": "listItem", "attrs": { "style": "ordered" }, "text": "b" },
+        { "id": "p", "type": "paragraph", "text": "break" },
+        { "id": "c", "type": "listItem", "attrs": { "style": "ordered" }, "text": "c" },
+        { "id": "d", "type": "listItem", "attrs": { "style": "bullet" }, "text": "d" },
+        { "id": "e", "type": "listItem", "attrs": { "style": "ordered" }, "text": "e" }
+      ] },
+      "expected": [
+        { "type": "listItem", "style": "ordered", "indent": 0, "checked": false, "number": 1, "runs": [ { "text": "a" } ] },
+        { "type": "listItem", "style": "ordered", "indent": 0, "checked": false, "number": 2, "runs": [ { "text": "b" } ] },
+        { "type": "paragraph", "align": "left", "runs": [ { "text": "break" } ] },
+        { "type": "listItem", "style": "ordered", "indent": 0, "checked": false, "number": 1, "runs": [ { "text": "c" } ] },
+        { "type": "listItem", "style": "bullet", "indent": 0, "checked": false, "runs": [ { "text": "d" } ] },
+        { "type": "listItem", "style": "ordered", "indent": 0, "checked": false, "number": 1, "runs": [ { "text": "e" } ] }
+      ]
+    },
+    {
+      "name": "quote and table",
+      "doc": { "version": 1, "blocks": [
+        { "id": "q", "type": "quote", "children": [
+          { "id": "q1", "type": "listItem", "attrs": { "style": "ordered" }, "text": "x" }
+        ] },
+        { "id": "t", "type": "table", "children": [
+          { "id": "r1", "type": "tableRow", "children": [
+            { "id": "c1", "type": "tableCell", "children": [ { "id": "c1p", "type": "paragraph", "text": "A" } ] },
+            { "id": "c2", "type": "tableCell", "children": [] }
+          ] }
+        ] }
+      ] },
+      "expected": [
+        { "type": "quote", "children": [
+          { "type": "listItem", "style": "ordered", "indent": 0, "checked": false, "number": 1, "runs": [ { "text": "x" } ] }
+        ] },
+        { "type": "table", "rows": [ [
+          [ { "type": "paragraph", "align": "left", "runs": [ { "text": "A" } ] } ],
+          []
+        ] ] }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+node_modules/
+dist/
+coverage/
+*.log
+.DS_Store
+
+# Rust
+rust/target/
+
+# .NET
+bin/
+obj/
+*.user
+.vs/

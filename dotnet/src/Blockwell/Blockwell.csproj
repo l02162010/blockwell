@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <PackageId>Blockwell</PackageId>
+    <Version>0.0.0</Version>
+    <Description>Validate and flatten Blockwell rich-text documents.</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/l02162010/blockwell</RepositoryUrl>
+  </PropertyGroup>
+
+</Project>

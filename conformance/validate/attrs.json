@@ -1,0 +1,70 @@
+{
+  "cases": [
+    {
+      "name": "heading needs level",
+      "doc": { "version": 1, "blocks": [ { "id": "h", "type": "heading", "text": "x" } ] },
+      "valid": false,
+      "errors": ["missing_attr"]
+    },
+    {
+      "name": "heading level 4 is not allowed",
+      "doc": { "version": 1, "blocks": [ { "id": "h", "type": "heading", "attrs": { "level": 4 }, "text": "x" } ] },
+      "valid": false,
+      "errors": ["invalid_attr"]
+    },
+    {
+      "name": "heading level as string is not allowed",
+      "doc": { "version": 1, "blocks": [ { "id": "h", "type": "heading", "attrs": { "level": "2" }, "text": "x" } ] },
+      "valid": false,
+      "errors": ["invalid_attr"]
+    },
+    {
+      "name": "unknown attribute",
+      "doc": { "version": 1, "blocks": [ { "id": "p", "type": "paragraph", "attrs": { "style": "color:red" }, "text": "x" } ] },
+      "valid": false,
+      "errors": ["unknown_attr"]
+    },
+    {
+      "name": "indent out of range",
+      "doc": { "version": 1, "blocks": [ { "id": "l", "type": "listItem", "attrs": { "style": "bullet", "indent": 7 }, "text": "x" } ] },
+      "valid": false,
+      "errors": ["invalid_attr"]
+    },
+    {
+      "name": "indent must be an integer",
+      "doc": { "version": 1, "blocks": [ { "id": "l", "type": "listItem", "attrs": { "style": "bullet", "indent": 0.5 }, "text": "x" } ] },
+      "valid": false,
+      "errors": ["invalid_attr"]
+    },
+    {
+      "name": "unknown code language",
+      "doc": { "version": 1, "blocks": [ { "id": "c", "type": "code", "attrs": { "language": "brainfuck" }, "text": "+" } ] },
+      "valid": false,
+      "errors": ["invalid_attr"]
+    },
+    {
+      "name": "image with http src",
+      "doc": { "version": 1, "blocks": [ { "id": "i", "type": "image", "attrs": { "src": "http://example.com/a.png" } } ] },
+      "valid": false,
+      "errors": ["invalid_attr"]
+    },
+    {
+      "name": "image with data uri",
+      "doc": { "version": 1, "blocks": [ { "id": "i", "type": "image", "attrs": { "src": "data:image/svg+xml,<svg onload=alert(1)>" } } ] },
+      "valid": false,
+      "errors": ["invalid_attr"]
+    },
+    {
+      "name": "image needs src",
+      "doc": { "version": 1, "blocks": [ { "id": "i", "type": "image", "attrs": { "alt": "x" } } ] },
+      "valid": false,
+      "errors": ["missing_attr"]
+    },
+    {
+      "name": "image width too small",
+      "doc": { "version": 1, "blocks": [ { "id": "i", "type": "image", "attrs": { "src": "https://a.example/x.png", "width": 4 } } ] },
+      "valid": false,
+      "errors": ["invalid_attr"]
+    }
+  ]
+}

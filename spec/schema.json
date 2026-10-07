@@ -1,0 +1,80 @@
+{
+  "$comment": "Blockwell document schema, version 1. Language-neutral source of truth. Every implementation reads its whitelists from this file or is generated from it. Rules that cannot be expressed here live in SPEC.md.",
+  "version": 1,
+  "limits": {
+    "maxBlocks": 10000,
+    "maxTextLength": 10000,
+    "maxUrlLength": 2048,
+    "maxAltLength": 200,
+    "maxIdLength": 64,
+    "maxTableColumns": 20,
+    "maxTableRows": 500,
+    "maxMarksPerBlock": 1000,
+    "maxEntitiesPerBlock": 1000
+  },
+  "idPattern": "^[A-Za-z0-9_-]{1,64}$",
+  "urlSchemes": {
+    "link": ["https", "mailto"],
+    "image": ["https"]
+  },
+  "palette": ["gray", "brown", "red", "orange", "yellow", "green", "teal", "blue", "purple", "pink"],
+  "codeLanguages": ["plaintext", "javascript", "typescript", "json", "html", "css", "bash", "python", "go", "rust", "csharp", "java", "sql", "yaml", "markdown"],
+  "blocks": {
+    "paragraph": {
+      "content": "text",
+      "attrs": { "align": { "type": "enum", "values": ["left", "center", "right"], "default": "left" } },
+      "marks": "*"
+    },
+    "heading": {
+      "content": "text",
+      "attrs": {
+        "level": { "type": "enum", "values": [1, 2, 3], "required": true },
+        "align": { "type": "enum", "values": ["left", "center", "right"], "default": "left" }
+      },
+      "marks": "*"
+    },
+    "listItem": {
+      "content": "text",
+      "attrs": {
+        "style": { "type": "enum", "values": ["bullet", "ordered", "todo"], "required": true },
+        "indent": { "type": "int", "min": 0, "max": 6, "default": 0 },
+        "checked": { "type": "bool", "default": false }
+      },
+      "marks": "*"
+    },
+    "code": {
+      "content": "text",
+      "attrs": { "language": { "type": "enum", "values": "$codeLanguages", "default": "plaintext" } },
+      "marks": [],
+      "entities": false,
+      "newlines": true
+    },
+    "divider": { "content": "atom", "attrs": {} },
+    "image": {
+      "content": "atom",
+      "attrs": {
+        "src": { "type": "url", "schemes": "$urlSchemes.image", "required": true },
+        "alt": { "type": "string", "maxLength": "$limits.maxAltLength", "default": "" },
+        "width": { "type": "int", "min": 16, "max": 2000 }
+      }
+    },
+    "quote": { "content": "children", "attrs": {}, "children": ["paragraph", "heading", "listItem"] },
+    "table": { "content": "children", "attrs": {}, "children": ["tableRow"] },
+    "tableRow": { "content": "children", "attrs": {}, "children": ["tableCell"], "nestedOnly": true },
+    "tableCell": { "content": "children", "attrs": {}, "children": ["paragraph"], "nestedOnly": true }
+  },
+  "marks": {
+    "bold": { "attrs": {} },
+    "italic": { "attrs": {} },
+    "underline": { "attrs": {} },
+    "strike": { "attrs": {} },
+    "code": { "attrs": {}, "excludes": "*" },
+    "link": { "attrs": { "href": { "type": "url", "schemes": "$urlSchemes.link", "required": true } } },
+    "color": { "attrs": { "value": { "type": "enum", "values": "$palette", "required": true } } },
+    "highlight": { "attrs": { "value": { "type": "enum", "values": "$palette", "required": true } } }
+  },
+  "entities": {
+    "lineBreak": { "attrs": {} },
+    "mention": { "attrs": { "userId": { "type": "id", "required": true } } }
+  }
+}

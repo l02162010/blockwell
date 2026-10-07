@@ -1,0 +1,71 @@
+# Blockwell
+
+A block-based rich-text editor whose documents are structured JSON, never HTML.
+
+Blockwell is built for one goal: rich text without the XSS problems of storing and rendering HTML. Every document is checked against a whitelist schema, colors are palette tokens instead of CSS, links are scheme-checked, and renderers build output so that user content can only ever become text.
+
+> **Status: early development.** The spec and the TypeScript validator exist; the editor does not yet.
+
+## What makes it different
+
+- **JSON is the only source of truth.** HTML, email, PDF and Excel output are all derived from it.
+- **The schema is the security boundary.** Anything not declared in [`spec/schema.json`](spec/schema.json) is rejected, on the client and on the server.
+- **One spec, four backends.** TypeScript, Go, C# and Rust implement the same [spec](spec/SPEC.md) and must pass the same [conformance suite](conformance/).
+- **Framework-agnostic core**, with a thin Vue 3 adapter first.
+
+## Document at a glance
+
+```json
+{
+  "version": 1,
+  "blocks": [
+    { "id": "h1", "type": "heading", "attrs": { "level": 2 }, "text": "Release notes" },
+    {
+      "id": "p1",
+      "type": "paragraph",
+      "text": "Hello world",
+      "marks": [
+        { "type": "bold", "from": 0, "to": 5 },
+        { "type": "color", "from": 6, "to": 11, "attrs": { "value": "red" } }
+      ]
+    }
+  ]
+}
+```
+
+Blocks: paragraph, heading (1–3), list item (bullet, ordered, to-do; flat with `indent`), quote, code, divider, image, table.
+Marks: bold, italic, underline, strike, inline code, link, text color, highlight — colors from a 10-color palette.
+
+## Repository layout
+
+| Path | Contents | Status |
+| --- | --- | --- |
+| [`spec/`](spec/) | Schema, palette and written specification | Draft |
+| [`conformance/`](conformance/) | Shared fixtures every implementation must pass | 66 cases |
+| [`packages/schema`](packages/schema/) | `@blockwell/schema` — TypeScript reference validator and flattener | Working |
+| [`go/`](go/) | Go module | Skeleton |
+| [`dotnet/`](dotnet/) | `Blockwell` NuGet package | Skeleton |
+| [`rust/`](rust/) | `blockwell` crate | Skeleton |
+
+## Roadmap
+
+1. **Model and schema** — spec, conformance suite, validators in all four languages.
+2. **Editor core** — operations and transactions, `beforeinput` handling, selection mapping, IME composition.
+3. **Vue adapter and renderers** — `@blockwell/vue`, HTML, email and plain-text renderers; PDF and Excel add-ons.
+4. **Migration** — convert existing HTML content to Blockwell JSON.
+
+## Development
+
+```bash
+pnpm install
+pnpm test        # TypeScript conformance tests
+cd go && go test ./...
+cd rust && cargo test
+cd dotnet && dotnet test tests/Blockwell.Tests/Blockwell.Tests.csproj
+```
+
+Changing behaviour means changing three things together: `spec/SPEC.md`, a fixture in `conformance/`, and the implementations.
+
+## License
+
+[MIT](LICENSE)

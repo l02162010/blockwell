@@ -1,0 +1,72 @@
+{
+  "cases": [
+    {
+      "name": "plain paragraph gets default align",
+      "doc": { "version": 1, "blocks": [ { "id": "p", "type": "paragraph", "text": "Hello" } ] },
+      "expected": [ { "type": "paragraph", "align": "left", "runs": [ { "text": "Hello" } ] } ]
+    },
+    {
+      "name": "empty paragraph has no runs",
+      "doc": { "version": 1, "blocks": [ { "id": "p", "type": "paragraph", "text": "" } ] },
+      "expected": [ { "type": "paragraph", "align": "left", "runs": [] } ]
+    },
+    {
+      "name": "overlapping marks split into runs",
+      "doc": { "version": 1, "blocks": [ { "id": "p", "type": "paragraph", "text": "Hello world", "marks": [
+        { "type": "link", "from": 6, "to": 11, "attrs": { "href": "https://example.com" } },
+        { "type": "bold", "from": 0, "to": 7 },
+        { "type": "color", "from": 3, "to": 11, "attrs": { "value": "red" } }
+      ] } ] },
+      "expected": [ { "type": "paragraph", "align": "left", "runs": [
+        { "text": "Hel", "bold": true },
+        { "text": "lo ", "bold": true, "color": "red" },
+        { "text": "w", "bold": true, "color": "red", "link": "https://example.com" },
+        { "text": "orld", "color": "red", "link": "https://example.com" }
+      ] } ]
+    },
+    {
+      "name": "touching same-type marks stay separate runs",
+      "doc": { "version": 1, "blocks": [ { "id": "p", "type": "paragraph", "text": "abcd", "marks": [
+        { "type": "highlight", "from": 0, "to": 2, "attrs": { "value": "yellow" } },
+        { "type": "highlight", "from": 2, "to": 4, "attrs": { "value": "green" } }
+      ] } ] },
+      "expected": [ { "type": "paragraph", "align": "left", "runs": [
+        { "text": "ab", "highlight": "yellow" },
+        { "text": "cd", "highlight": "green" }
+      ] } ]
+    },
+    {
+      "name": "entities become their own runs",
+      "doc": { "version": 1, "blocks": [ { "id": "p", "type": "paragraph", "text": "Hi ￼!￼", "marks": [
+        { "type": "italic", "from": 0, "to": 6 }
+      ], "entities": [
+        { "at": 3, "type": "mention", "attrs": { "userId": "u_42" } },
+        { "at": 5, "type": "lineBreak" }
+      ] } ] },
+      "expected": [ { "type": "paragraph", "align": "left", "runs": [
+        { "text": "Hi ", "italic": true },
+        { "entity": "mention", "userId": "u_42" },
+        { "text": "!", "italic": true },
+        { "entity": "lineBreak" }
+      ] } ]
+    },
+    {
+      "name": "code block keeps newlines and default language",
+      "doc": { "version": 1, "blocks": [ { "id": "c", "type": "code", "text": "a\nb" } ] },
+      "expected": [ { "type": "code", "language": "plaintext", "runs": [ { "text": "a\nb" } ] } ]
+    },
+    {
+      "name": "atoms",
+      "doc": { "version": 1, "blocks": [
+        { "id": "d", "type": "divider" },
+        { "id": "i", "type": "image", "attrs": { "src": "https://cdn.example.com/a.png" } },
+        { "id": "j", "type": "image", "attrs": { "src": "https://cdn.example.com/b.png", "alt": "B", "width": 320 } }
+      ] },
+      "expected": [
+        { "type": "divider" },
+        { "type": "image", "src": "https://cdn.example.com/a.png", "alt": "" },
+        { "type": "image", "src": "https://cdn.example.com/b.png", "alt": "B", "width": 320 }
+      ]
+    }
+  ]
+}

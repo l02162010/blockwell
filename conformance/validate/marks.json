@@ -1,0 +1,110 @@
+{
+  "cases": [
+    {
+      "name": "overlapping marks of different types",
+      "doc": { "version": 1, "blocks": [ { "id": "p", "type": "paragraph", "text": "Hello world", "marks": [
+        { "type": "bold", "from": 0, "to": 7 },
+        { "type": "color", "from": 3, "to": 11, "attrs": { "value": "red" } },
+        { "type": "link", "from": 6, "to": 11, "attrs": { "href": "https://example.com/?q=1#x" } }
+      ] } ] },
+      "valid": true
+    },
+    {
+      "name": "touching marks of the same type",
+      "doc": { "version": 1, "blocks": [ { "id": "p", "type": "paragraph", "text": "abcd", "marks": [
+        { "type": "color", "from": 0, "to": 2, "attrs": { "value": "red" } },
+        { "type": "color", "from": 2, "to": 4, "attrs": { "value": "blue" } }
+      ] } ] },
+      "valid": true
+    },
+    {
+      "name": "overlapping marks of the same type",
+      "doc": { "version": 1, "blocks": [ { "id": "p", "type": "paragraph", "text": "abcd", "marks": [
+        { "type": "color", "from": 0, "to": 3, "attrs": { "value": "red" } },
+        { "type": "color", "from": 2, "to": 4, "attrs": { "value": "blue" } }
+      ] } ] },
+      "valid": false,
+      "errors": ["mark_overlap"]
+    },
+    {
+      "name": "inline code excludes other marks",
+      "doc": { "version": 1, "blocks": [ { "id": "p", "type": "paragraph", "text": "abcd", "marks": [
+        { "type": "code", "from": 0, "to": 2 },
+        { "type": "bold", "from": 1, "to": 3 }
+      ] } ] },
+      "valid": false,
+      "errors": ["mark_overlap"]
+    },
+    {
+      "name": "unknown mark type",
+      "doc": { "version": 1, "blocks": [ { "id": "p", "type": "paragraph", "text": "abcd", "marks": [
+        { "type": "style", "from": 0, "to": 2, "attrs": { "css": "x" } }
+      ] } ] },
+      "valid": false,
+      "errors": ["unknown_mark_type"]
+    },
+    {
+      "name": "marks not allowed in code block",
+      "doc": { "version": 1, "blocks": [ { "id": "c", "type": "code", "text": "abcd", "marks": [
+        { "type": "bold", "from": 0, "to": 2 }
+      ] } ] },
+      "valid": false,
+      "errors": ["mark_not_allowed"]
+    },
+    {
+      "name": "range past end of text",
+      "doc": { "version": 1, "blocks": [ { "id": "p", "type": "paragraph", "text": "abc", "marks": [
+        { "type": "bold", "from": 1, "to": 4 }
+      ] } ] },
+      "valid": false,
+      "errors": ["invalid_range"]
+    },
+    {
+      "name": "empty range",
+      "doc": { "version": 1, "blocks": [ { "id": "p", "type": "paragraph", "text": "abc", "marks": [
+        { "type": "bold", "from": 1, "to": 1 }
+      ] } ] },
+      "valid": false,
+      "errors": ["invalid_range"]
+    },
+    {
+      "name": "offsets are utf-16 code units",
+      "doc": { "version": 1, "blocks": [ { "id": "p", "type": "paragraph", "text": "😀中文", "marks": [
+        { "type": "bold", "from": 0, "to": 4 }
+      ] } ] },
+      "valid": true
+    },
+    {
+      "name": "range splits a surrogate pair",
+      "doc": { "version": 1, "blocks": [ { "id": "p", "type": "paragraph", "text": "😀中文", "marks": [
+        { "type": "bold", "from": 1, "to": 3 }
+      ] } ] },
+      "valid": false,
+      "errors": ["invalid_range"]
+    },
+    {
+      "name": "color must be a palette token",
+      "doc": { "version": 1, "blocks": [ { "id": "p", "type": "paragraph", "text": "abc", "marks": [
+        { "type": "color", "from": 0, "to": 3, "attrs": { "value": "#ff0000" } }
+      ] } ] },
+      "valid": false,
+      "errors": ["invalid_attr"]
+    },
+    {
+      "name": "highlight cannot inject css",
+      "doc": { "version": 1, "blocks": [ { "id": "p", "type": "paragraph", "text": "abc", "marks": [
+        { "type": "highlight", "from": 0, "to": 3, "attrs": { "value": "red;background:url(x)" } }
+      ] } ] },
+      "valid": false,
+      "errors": ["invalid_attr"]
+    },
+    {
+      "name": "unknown key on a mark",
+      "doc": { "version": 1, "blocks": [ { "id": "p", "type": "paragraph", "text": "abc", "marks": [
+        { "type": "bold", "from": 0, "to": 3, "onclick": "x" }
+      ] } ] },
+      "valid": false,
+      "errors": ["unknown_key"]
+    }
+  ]
+}

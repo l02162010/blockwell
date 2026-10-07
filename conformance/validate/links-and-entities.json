@@ -1,0 +1,113 @@
+{
+  "cases": [
+    {
+      "name": "mailto link",
+      "doc": { "version": 1, "blocks": [ { "id": "p", "type": "paragraph", "text": "mail", "marks": [
+        { "type": "link", "from": 0, "to": 4, "attrs": { "href": "mailto:a@example.com" } }
+      ] } ] },
+      "valid": true
+    },
+    {
+      "name": "javascript link",
+      "doc": { "version": 1, "blocks": [ { "id": "p", "type": "paragraph", "text": "x", "marks": [
+        { "type": "link", "from": 0, "to": 1, "attrs": { "href": "javascript:alert(1)" } }
+      ] } ] },
+      "valid": false,
+      "errors": ["invalid_attr"]
+    },
+    {
+      "name": "javascript link with mixed case",
+      "doc": { "version": 1, "blocks": [ { "id": "p", "type": "paragraph", "text": "x", "marks": [
+        { "type": "link", "from": 0, "to": 1, "attrs": { "href": "JaVaScRiPt:alert(1)" } }
+      ] } ] },
+      "valid": false,
+      "errors": ["invalid_attr"]
+    },
+    {
+      "name": "uppercase https scheme is rejected",
+      "doc": { "version": 1, "blocks": [ { "id": "p", "type": "paragraph", "text": "x", "marks": [
+        { "type": "link", "from": 0, "to": 1, "attrs": { "href": "HTTPS://example.com" } }
+      ] } ] },
+      "valid": false,
+      "errors": ["invalid_attr"]
+    },
+    {
+      "name": "link with leading whitespace",
+      "doc": { "version": 1, "blocks": [ { "id": "p", "type": "paragraph", "text": "x", "marks": [
+        { "type": "link", "from": 0, "to": 1, "attrs": { "href": " https://example.com" } }
+      ] } ] },
+      "valid": false,
+      "errors": ["invalid_attr"]
+    },
+    {
+      "name": "link with embedded tab",
+      "doc": { "version": 1, "blocks": [ { "id": "p", "type": "paragraph", "text": "x", "marks": [
+        { "type": "link", "from": 0, "to": 1, "attrs": { "href": "https://exa\tmple.com" } }
+      ] } ] },
+      "valid": false,
+      "errors": ["invalid_attr"]
+    },
+    {
+      "name": "https without host",
+      "doc": { "version": 1, "blocks": [ { "id": "p", "type": "paragraph", "text": "x", "marks": [
+        { "type": "link", "from": 0, "to": 1, "attrs": { "href": "https:///etc/passwd" } }
+      ] } ] },
+      "valid": false,
+      "errors": ["invalid_attr"]
+    },
+    {
+      "name": "link with angle bracket",
+      "doc": { "version": 1, "blocks": [ { "id": "p", "type": "paragraph", "text": "x", "marks": [
+        { "type": "link", "from": 0, "to": 1, "attrs": { "href": "https://example.com/\"><script>" } }
+      ] } ] },
+      "valid": false,
+      "errors": ["invalid_attr"]
+    },
+    {
+      "name": "mention and line break entities",
+      "doc": { "version": 1, "blocks": [ { "id": "p", "type": "paragraph", "text": "Hi ￼￼bye", "entities": [
+        { "at": 3, "type": "mention", "attrs": { "userId": "u_42" } },
+        { "at": 4, "type": "lineBreak" }
+      ] } ] },
+      "valid": true
+    },
+    {
+      "name": "placeholder without entity",
+      "doc": { "version": 1, "blocks": [ { "id": "p", "type": "paragraph", "text": "a￼b" } ] },
+      "valid": false,
+      "errors": ["entity_mismatch"]
+    },
+    {
+      "name": "entity not on placeholder",
+      "doc": { "version": 1, "blocks": [ { "id": "p", "type": "paragraph", "text": "abc", "entities": [
+        { "at": 1, "type": "lineBreak" }
+      ] } ] },
+      "valid": false,
+      "errors": ["entity_mismatch"]
+    },
+    {
+      "name": "mention with invalid user id",
+      "doc": { "version": 1, "blocks": [ { "id": "p", "type": "paragraph", "text": "￼", "entities": [
+        { "at": 0, "type": "mention", "attrs": { "userId": "<img src=x>" } }
+      ] } ] },
+      "valid": false,
+      "errors": ["invalid_attr"]
+    },
+    {
+      "name": "unknown entity type",
+      "doc": { "version": 1, "blocks": [ { "id": "p", "type": "paragraph", "text": "￼", "entities": [
+        { "at": 0, "type": "iframe", "attrs": {} }
+      ] } ] },
+      "valid": false,
+      "errors": ["unknown_entity_type"]
+    },
+    {
+      "name": "entities not allowed in code block",
+      "doc": { "version": 1, "blocks": [ { "id": "c", "type": "code", "text": "￼", "entities": [
+        { "at": 0, "type": "lineBreak" }
+      ] } ] },
+      "valid": false,
+      "errors": ["entity_mismatch"]
+    }
+  ]
+}

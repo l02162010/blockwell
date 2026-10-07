@@ -1,0 +1,15 @@
+{
+  "$comment": "Color values for each palette token, per output target. Documents store only the token. 'light' is also used for email; 'print' is used for PDF and Excel. Values are initial proposals: check text-on-background contrast (>= 4.5:1) before 1.0.",
+  "tokens": {
+    "gray":   { "light": { "text": "#6B7280", "bg": "#F3F4F6" }, "dark": { "text": "#9CA3AF", "bg": "#374151" }, "print": { "text": "#4B5563", "bg": "#F3F4F6" } },
+    "brown":  { "light": { "text": "#8A5A3C", "bg": "#F3E8DC" }, "dark": { "text": "#C8A27C", "bg": "#4A3628" }, "print": { "text": "#7A4E33", "bg": "#F3E8DC" } },
+    "red":    { "light": { "text": "#DC2626", "bg": "#FEE2E2" }, "dark": { "text": "#F87171", "bg": "#4C1D1D" }, "print": { "text": "#B91C1C", "bg": "#FEE2E2" } },
+    "orange": { "light": { "text": "#C2410C", "bg": "#FFEDD5" }, "dark": { "text": "#FB923C", "bg": "#4A2A12" }, "print": { "text": "#C2410C", "bg": "#FFEDD5" } },
+    "yellow": { "light": { "text": "#A16207", "bg": "#FEF9C3" }, "dark": { "text": "#FACC15", "bg": "#423A0F" }, "print": { "text": "#854D0E", "bg": "#FEF9C3" } },
+    "green":  { "light": { "text": "#15803D", "bg": "#DCFCE7" }, "dark": { "text": "#4ADE80", "bg": "#14352A" }, "print": { "text": "#166534", "bg": "#DCFCE7" } },
+    "teal":   { "light": { "text": "#0F766E", "bg": "#CCFBF1" }, "dark": { "text": "#2DD4BF", "bg": "#11393A" }, "print": { "text": "#115E59", "bg": "#CCFBF1" } },
+    "blue":   { "light": { "text": "#2563EB", "bg": "#DBEAFE" }, "dark": { "text": "#60A5FA", "bg": "#1E3354" }, "print": { "text": "#1D4ED8", "bg": "#DBEAFE" } },
+    "purple": { "light": { "text": "#7C3AED", "bg": "#EDE9FE" }, "dark": { "text": "#A78BFA", "bg": "#33275A" }, "print": { "text": "#6D28D9", "bg": "#EDE9FE" } },
+    "pink":   { "light": { "text": "#DB2777", "bg": "#FCE7F3" }, "dark": { "text": "#F472B6", "bg": "#4A1D35" }, "print": { "text": "#BE185D", "bg": "#FCE7F3" } }
+  }
+}

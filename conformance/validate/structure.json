@@ -1,0 +1,149 @@
+{
+  "cases": [
+    {
+      "name": "empty document is valid",
+      "doc": { "version": 1, "blocks": [] },
+      "valid": true
+    },
+    {
+      "name": "one of each block type",
+      "doc": {
+        "version": 1,
+        "blocks": [
+          { "id": "p1", "type": "paragraph", "text": "Hello" },
+          { "id": "h1", "type": "heading", "attrs": { "level": 2 }, "text": "Title" },
+          { "id": "l1", "type": "listItem", "attrs": { "style": "todo", "checked": true }, "text": "Done" },
+          { "id": "c1", "type": "code", "attrs": { "language": "typescript" }, "text": "const a = 1;\nconst b = 2;" },
+          { "id": "d1", "type": "divider" },
+          { "id": "i1", "type": "image", "attrs": { "src": "https://cdn.example.com/a.png", "alt": "A", "width": 320 } },
+          { "id": "q1", "type": "quote", "children": [ { "id": "q1p", "type": "paragraph", "text": "Quoted" } ] },
+          {
+            "id": "t1",
+            "type": "table",
+            "children": [
+              { "id": "r1", "type": "tableRow", "children": [
+                { "id": "c11", "type": "tableCell", "children": [ { "id": "c11p", "type": "paragraph", "text": "A" } ] },
+                { "id": "c12", "type": "tableCell", "children": [ { "id": "c12p", "type": "paragraph", "text": "B" } ] }
+              ] }
+            ]
+          }
+        ]
+      },
+      "valid": true
+    },
+    {
+      "name": "unsupported version",
+      "doc": { "version": 2, "blocks": [] },
+      "valid": false,
+      "errors": ["unsupported_version"]
+    },
+    {
+      "name": "unknown top-level key",
+      "doc": { "version": 1, "blocks": [], "html": "<b>x</b>" },
+      "valid": false,
+      "errors": ["unknown_key"]
+    },
+    {
+      "name": "unknown block type",
+      "doc": { "version": 1, "blocks": [ { "id": "x", "type": "script", "text": "alert(1)" } ] },
+      "valid": false,
+      "errors": ["unknown_block_type"]
+    },
+    {
+      "name": "invalid id characters",
+      "doc": { "version": 1, "blocks": [ { "id": "a b", "type": "paragraph", "text": "" } ] },
+      "valid": false,
+      "errors": ["invalid_id"]
+    },
+    {
+      "name": "duplicate id across nesting",
+      "doc": { "version": 1, "blocks": [
+        { "id": "a", "type": "paragraph", "text": "" },
+        { "id": "q", "type": "quote", "children": [ { "id": "a", "type": "paragraph", "text": "" } ] }
+      ] },
+      "valid": false,
+      "errors": ["duplicate_id"]
+    },
+    {
+      "name": "text block without text",
+      "doc": { "version": 1, "blocks": [ { "id": "p", "type": "paragraph" } ] },
+      "valid": false,
+      "errors": ["missing_key"]
+    },
+    {
+      "name": "atom block with text",
+      "doc": { "version": 1, "blocks": [ { "id": "d", "type": "divider", "text": "x" } ] },
+      "valid": false,
+      "errors": ["unknown_key"]
+    },
+    {
+      "name": "quote cannot contain a quote",
+      "doc": { "version": 1, "blocks": [
+        { "id": "q", "type": "quote", "children": [ { "id": "q2", "type": "quote", "children": [] } ] }
+      ] },
+      "valid": false,
+      "errors": ["invalid_child"]
+    },
+    {
+      "name": "tableRow at top level",
+      "doc": { "version": 1, "blocks": [ { "id": "r", "type": "tableRow", "children": [] } ] },
+      "valid": false,
+      "errors": ["invalid_child"]
+    },
+    {
+      "name": "ragged table",
+      "doc": { "version": 1, "blocks": [
+        { "id": "t", "type": "table", "children": [
+          { "id": "r1", "type": "tableRow", "children": [
+            { "id": "a", "type": "tableCell", "children": [] },
+            { "id": "b", "type": "tableCell", "children": [] }
+          ] },
+          { "id": "r2", "type": "tableRow", "children": [
+            { "id": "c", "type": "tableCell", "children": [] }
+          ] }
+        ] }
+      ] },
+      "valid": false,
+      "errors": ["table_shape"]
+    },
+    {
+      "name": "list indent may grow by one",
+      "doc": { "version": 1, "blocks": [
+        { "id": "a", "type": "listItem", "attrs": { "style": "bullet" }, "text": "a" },
+        { "id": "b", "type": "listItem", "attrs": { "style": "bullet", "indent": 1 }, "text": "b" },
+        { "id": "c", "type": "listItem", "attrs": { "style": "bullet", "indent": 0 }, "text": "c" }
+      ] },
+      "valid": true
+    },
+    {
+      "name": "list indent jumps by two",
+      "doc": { "version": 1, "blocks": [
+        { "id": "a", "type": "listItem", "attrs": { "style": "bullet" }, "text": "a" },
+        { "id": "b", "type": "listItem", "attrs": { "style": "bullet", "indent": 2 }, "text": "b" }
+      ] },
+      "valid": false,
+      "errors": ["invalid_indent"]
+    },
+    {
+      "name": "first list item indented",
+      "doc": { "version": 1, "blocks": [
+        { "id": "p", "type": "paragraph", "text": "x" },
+        { "id": "a", "type": "listItem", "attrs": { "style": "bullet", "indent": 1 }, "text": "a" }
+      ] },
+      "valid": false,
+      "errors": ["invalid_indent"]
+    },
+    {
+      "name": "newline outside code block",
+      "doc": { "version": 1, "blocks": [ { "id": "p", "type": "paragraph", "text": "a\nb" } ] },
+      "valid": false,
+      "errors": ["invalid_text"]
+    },
+    {
+      "name": "control character in text",
+      "doc": { "version": 1, "blocks": [ { "id": "p", "type": "paragraph", "text": "a\u0007b" } ] },
+      "valid": false,
+      "errors": ["invalid_text"]
+    }
+  ]
+}
