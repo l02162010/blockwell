@@ -30,6 +30,7 @@ for (const [name, m] of Object.entries(report.editor)) {
   if (!m.description) problems.push(`Editor.${name}: no description`);
   if (!used(name)) problems.push(`Editor.${name}: not exercised by any test`);
 }
+for (const name of report.core ?? []) if (!used(name)) problems.push(`@blockwell/core ${name}: not exercised by any test`);
 if (problems.length) {
   console.error(problems.join('\n'));
   console.error(`\n${problems.length} problem(s). Every public API needs a description and a test.`);

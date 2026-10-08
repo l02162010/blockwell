@@ -1,23 +1,29 @@
+/*
+ * Public API of @blockwell/core. Everything here is documented (apps/docs) and tested; the
+ * modules behind it (commands, ops, history, rendering) are internal.
+ */
+
+// The editor.
 export { Editor } from './editor.js';
 export type { EditorOptions, EditorEvents, EditorAction, Feedback, HighlightRange, KeyHandler, SlashState, Upload, UploadResult } from './editor.js';
-export { EditorState, Tr, applyTransaction } from './state.js';
+// Transactions, for custom commands: `const tr = editor.state.tr(); …; editor.dispatch(tr)`.
+export { EditorState, Tr } from './state.js';
 export type { ApplyResult } from './state.js';
-export { History, MERGE_WINDOW } from './history.js';
-export { applyOp, invertOp, invertOps } from './ops.js';
-export * as commands from './commands.js';
-export { LINK_SCHEMES, IMAGE_SCHEMES, textToBlocks, overflowToBlocks } from './commands.js';
-export { INPUT_RULES, runInputRules } from './inputRules.js';
-export { parseHtml, parseBlockwell, convertHtml, countBlocks, emptyReport, CLIPBOARD_MIME } from './paste.js';
-export type { PasteIssue, PasteReport, ParsedPaste } from './paste.js';
-export { parseMarkdown, looksLikeMarkdown } from './markdown.js';
-export type { MarkdownResult } from './markdown.js';
+
+// Working with documents.
+export { getBlock, locate, textBlocks, allBlocks, ancestors, newId, caret } from './model.js';
+export { LINK_SCHEMES, IMAGE_SCHEMES } from './commands.js';
 export { diffDocs } from './diff.js';
 export type { BlockChange, DocDiff } from './diff.js';
-export { tokenize } from './highlight.js';
-export { renderBlock, renderText, listNumbers } from './render.js';
-export type { RenderOptions } from './render.js';
-export { normalizeMarks, setMarkOnRange, rangeHasMark, marksAt, OBJ } from './marks.js';
-export { locate, getBlock, textBlocks, allBlocks, ancestors, newId, caret } from './model.js';
+
+// Bringing content in: old HTML (migration) and Markdown.
+export { convertHtml } from './paste.js';
+export type { PasteIssue, PasteReport } from './paste.js';
+export { parseMarkdown } from './markdown.js';
+export type { MarkdownResult } from './markdown.js';
+
+// Colours: the palette tokens and their CSS for each output target.
 export { PALETTE_COLORS, paletteCss } from './palette.js';
 export type { PaletteTarget } from './palette.js';
+
 export type * from './types.js';

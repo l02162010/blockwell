@@ -50,6 +50,10 @@ ts.forEachChild(src, (node) => {
   }
 });
 
+// Core: the runtime values exported by @blockwell/core besides Editor.
+const coreIndex = fs.readFileSync(path.join(root, 'packages/core/src/index.ts'), 'utf8');
+out.core = [...coreIndex.matchAll(/^export \{([^}]+)\} from/gm)].flatMap((m) => m[1].split(',').map((x) => x.trim())).filter((x) => x && x !== 'Editor');
+
 const file = path.join(root, 'api-report.json');
 fs.writeFileSync(file, JSON.stringify(out, null, 2) + '\n');
 const n = Object.values(out.components).reduce((a, c) => a + c.props.length + c.events.length, 0);

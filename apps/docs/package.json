@@ -1,0 +1,19 @@
+{
+  "name": "@blockwell/docs",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "api": "node ../../scripts/api-report.mjs",
+    "dev": "pnpm api && vitepress dev",
+    "build": "pnpm api && vitepress build",
+    "preview": "vitepress preview"
+  },
+  "dependencies": {
+    "@blockwell/core": "workspace:*",
+    "@blockwell/vue": "workspace:*",
+    "vue": "^3.5.0"
+  },
+  "devDependencies": {
+    "vitepress": "2.0.0-alpha.20"
+  }
+}
