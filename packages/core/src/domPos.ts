@@ -50,7 +50,7 @@ export function domToOffset(container: Element, node: Node, offset: number): num
   return total;
 }
 
-export function containerLength(container: Element): number {
+function containerLength(container: Element): number {
   let n = 0;
   for (const l of leaves(container)) n += l.len;
   return n;

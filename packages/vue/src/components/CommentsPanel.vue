@@ -18,9 +18,21 @@ export interface CommentThread {
 }
 
 /** Side panel for one comment thread. Storage and permissions belong to the host app. */
-const props = defineProps<{ thread: CommentThread; messages?: Messages }>();
-const emit = defineEmits<{ reply: [text: string]; resolve: []; close: [] }>();
-const m = props.messages ?? defaultMessages;
+const props = defineProps<{
+  /** The thread to show. With no messages yet it is a new comment: the field takes focus. */
+  thread: CommentThread;
+  /** Replaces any of the UI strings. */
+  messages?: Partial<Messages>;
+}>();
+const emit = defineEmits<{
+  /** Enter, ⌘↵ or the send button with text: add it to the thread. */
+  reply: [text: string];
+  /** 解決 was pressed. */
+  resolve: [];
+  /** The close button or Escape. Drop the thread if it has no messages yet. */
+  close: [];
+}>();
+const m: Messages = { ...defaultMessages, ...props.messages };
 const draft = ref('');
 const input = ref<HTMLInputElement | null>(null);
 // A new thread starts with its first message.

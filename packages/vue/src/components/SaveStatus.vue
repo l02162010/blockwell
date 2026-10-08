@@ -2,7 +2,17 @@
 import { defaultMessages } from '../messages.js';
 
 /** Save state, always in the same place in the top bar (design §06). */
-withDefaults(defineProps<{ status: 'saving' | 'saved' | 'offline' | 'error'; variant?: 'inline' | 'chip'; label?: string }>(), { variant: 'inline' });
+withDefaults(
+  defineProps<{
+    /** Where the last save stands. Shown with the matching icon and colour. */
+    status: 'saving' | 'saved' | 'offline' | 'error';
+    /** `inline` for a top bar, `chip` for a compact pill. */
+    variant?: 'inline' | 'chip';
+    /** Replaces the default text for this status. */
+    label?: string;
+  }>(),
+  { variant: 'inline' },
+);
 const m = defaultMessages;
 </script>
 

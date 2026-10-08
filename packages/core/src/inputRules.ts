@@ -30,7 +30,7 @@ const fence: Rule['run'] = (tr, o, m) => {
   if (lang) tr.updateAttrs(sel.focus.block, { language: lang });
   return true;
 };
-export const FENCE = /^```([\w#+-]*)$/;
+const FENCE = /^```([\w#+-]*)$/;
 
 /** Markdown-style shortcuts typed at the start of a paragraph (engine guide §4). */
 export const INPUT_RULES: Rule[] = [

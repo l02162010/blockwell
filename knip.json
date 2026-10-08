@@ -1,0 +1,54 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "workspaces": {
+    "packages/schema": {
+      "entry": [
+        "src/index.ts"
+      ],
+      "project": [
+        "src/**/*.ts"
+      ]
+    },
+    "packages/core": {
+      "entry": [
+        "src/index.ts"
+      ],
+      "project": [
+        "src/**/*.ts"
+      ]
+    },
+    "packages/vue": {
+      "entry": [
+        "src/index.ts",
+        "test/**/*.ts"
+      ],
+      "project": [
+        "src/**/*.{ts,vue}"
+      ]
+    },
+    "apps/playground": {
+      "entry": [
+        "e2e/**/*.ts"
+      ],
+      "project": [
+        "src/**/*.{ts,vue}"
+      ]
+    },
+    "apps/site": {
+      "entry": [],
+      "project": [
+        "src/**/*.{ts,vue}"
+      ]
+    }
+  },
+  "ignoreWorkspaces": [
+    "go",
+    "rust",
+    "dotnet"
+  ],
+  "ignoreDependencies": [
+    "jsdom",
+    "@types/jsdom",
+    "@arethetypeswrong/cli"
+  ]
+}

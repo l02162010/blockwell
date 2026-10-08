@@ -62,7 +62,7 @@ export function useEditorState(editor: Ref<Editor | null>) {
 
 export type PopoverKind = 'block' | 'align' | 'color' | 'link' | 'codeLanguage' | 'tableColumn' | 'tableRow' | 'imageAlt' | 'insert' | 'blockActions' | null;
 
-export interface UiState {
+interface UiState {
   popover: PopoverKind;
   /** Element or rectangle the popover is attached to. */
   anchor: (() => DOMRect | null) | null;

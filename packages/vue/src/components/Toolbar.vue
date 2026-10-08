@@ -13,7 +13,7 @@ import ToolButton from './ToolButton.vue';
  * turns into a format row while text is selected and a table bar inside tables.
  */
 const props = defineProps<{ variant: 'page' | 'field' | 'comment' | 'mobile'; comments?: boolean }>();
-const emit = defineEmits<{ mention: []; comment: [] }>();
+const emit = defineEmits<{ comment: [] }>();
 const ctx = useBlockwell();
 const { editor, active, messages: m } = ctx;
 

@@ -14,9 +14,21 @@ export interface Person {
 }
 
 /** Avatars in the top bar; click for who is here, where, and "go to" (design 01, 協作者). */
-const props = defineProps<{ people: Person[]; follow?: boolean; messages?: Messages }>();
-const emit = defineEmits<{ jump: [person: Person]; 'update:follow': [on: boolean] }>();
-const m = props.messages ?? defaultMessages;
+const props = defineProps<{
+  /** Who is in the document now; mark yourself with `self: true`. */
+  people: Person[];
+  /** The 跟隨 switch (`v-model:follow`): keep someone else's caret in view. What following does is up to you. */
+  follow?: boolean;
+  /** Replaces any of the UI strings. */
+  messages?: Partial<Messages>;
+}>();
+const emit = defineEmits<{
+  /** 前往 was pressed for this person: scroll to them, e.g. `editor.revealBlock()`. */
+  jump: [person: Person];
+  /** The 跟隨 switch changed. */
+  'update:follow': [on: boolean];
+}>();
+const m: Messages = { ...defaultMessages, ...props.messages };
 const open = ref(false);
 const root = ref<HTMLElement | null>(null);
 const onDoc = (e: PointerEvent) => {

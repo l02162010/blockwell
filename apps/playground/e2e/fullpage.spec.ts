@@ -242,3 +242,16 @@ test('Escape cancels a drag', async ({ page }) => {
   await page.mouse.up();
   expect((await json(page)).map(textOf)).toEqual(before);
 });
+
+test('layout-dependent props: cursors, commentCounts and highlights; comment-open from a badge', async ({ page }) => {
+  // cursors: other people's carets are drawn with their names.
+  await ed(page).locator('blockquote').scrollIntoViewIfNeeded();
+  await expect(page.locator('.bw-remote-label', { hasText: '陳柏翰' })).toBeVisible();
+  // commentCounts: a badge with the count; clicking it emits comment-open and the page opens the thread.
+  const badge = page.locator('.bw-comment-badge').first();
+  await expect(badge).toContainText('2');
+  await badge.click();
+  await expect(page.locator('.bw-panel')).toContainText('JSON 是唯一真相');
+  // highlights: the open thread's words are painted with ::highlight(bw-comment).
+  expect(await page.evaluate(() => (CSS as unknown as { highlights: Map<string, unknown> }).highlights.has('bw-comment'))).toBe(true);
+});

@@ -146,7 +146,7 @@ export function versionSnapshots(current: Doc): Record<string, Doc> {
   return { v4, v3, v2, v1 };
 }
 
-export function previousVersion(current: Doc): Doc {
+function previousVersion(current: Doc): Doc {
   const blocks = current.blocks.slice();
   const i = blocks.findIndex((b) => b.text?.startsWith('完整規格見'));
   const removed: Block = { id: 'v_old', type: 'paragraph', text: '第一版先不處理行動裝置輸入法。' };

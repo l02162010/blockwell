@@ -17,7 +17,7 @@ const MARK_ORDER = ['link', 'code', 'bold', 'italic', 'underline', 'strike', 'co
 
 type Child = Node | string;
 
-export function el<K extends keyof HTMLElementTagNameMap>(
+function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
   attrs: Record<string, string> = {},
   ...children: Child[]

@@ -35,21 +35,29 @@ import UploadList from './UploadList.vue';
 
 const props = withDefaults(
   defineProps<{
+    /** The document (`v-model`). A new value from outside replaces the content; invalid documents are refused. */
     modelValue?: Doc | null;
     /** `page`: full document. `field`: a form field replacing a rich textarea. `comment`: inline styles only. */
     variant?: 'page' | 'field' | 'comment';
+    /** `false` makes the document read-only: no toolbars or handles, still selectable, ⌘F and ⌘/ still work. */
     editable?: boolean;
+    /** Shown while the whole document is empty. */
     placeholder?: string;
+    /** Block types this editor may create, e.g. `['paragraph', 'listItem']` (default: all; `comment`: paragraphs). Read once. */
     allowedBlocks?: readonly string[];
+    /** Uploads a pasted, dropped or picked image and resolves to its `https:` URL. Without it there is no image upload. */
     uploadImage?: EditorOptions['uploadImage'];
+    /** Display name for a mention's user id (documents store only the id). */
     mentionLabel?: EditorOptions['mentionLabel'];
     /** Enables `@` mentions: looks up members for the picker. Documents store only the id. */
     mentionSearch?: (query: string) => Member[] | Promise<Member[]>;
+    /** Replaces any of the UI strings (see `defaultMessages`). Read once. */
     messages?: Partial<Messages>;
     /** Character limit shown by the field variant's counter. */
     maxLength?: number;
     /** Markdown shortcut hint shown by the field variant. */
     hint?: string;
+    /** Other people's carets to draw, from your collaboration layer. */
     cursors?: RemoteCursor[];
     /** Shows a comment button in the selection bar. */
     comments?: boolean;
@@ -69,7 +77,7 @@ const props = withDefaults(
     onboarding?: boolean;
     /** Shows the page variant's top toolbar (the floating bar and slash menu stay). */
     toolbar?: boolean;
-    /** Below this width the page toolbar moves above the keyboard. */
+    /** Below this viewport width (px) the layout switches to the phone layout: a bar above the keyboard, sheets instead of popovers. Read on mount. */
     mobileBreakpoint?: number;
     /** `mobile` forces the narrow layout with the toolbar inside the editor (for previews). */
     layout?: 'auto' | 'mobile';
@@ -90,12 +98,17 @@ const props = withDefaults(
   },
 );
 const emit = defineEmits<{
+  /** The document changed (debounced by `debounce` ms; flushed on blur). */
   'update:modelValue': [doc: Doc];
+  /** The editor is mounted; use the `Editor` for anything the props do not cover. */
   ready: [editor: Editor];
+  /** `comment` variant: ⌘↵ or the send button with a non-empty message. */
   submit: [doc: Doc];
+  /** The comment button (selection bar or phone bar) was pressed; read the selection from the editor. */
   comment: [];
+  /** A comment badge was clicked; the payload is its top-level block id. */
   'comment-open': [block: string];
-  mention: [];
+  /** The retry button in the save-error banner was pressed. */
   retry: [];
   /** The first-run tips were hidden; set `onboarding` to false from now on to remember it. */
   'onboarding-dismiss': [];
@@ -205,6 +218,9 @@ if (props.variant === 'comment') {
 }
 const submit = () => {
   if (timer) flush();
+  // An empty message is not sent (read the document now, not the per-frame snapshot).
+  const blocks = ed().getJSON().blocks;
+  if (blocks.length === 1 && blocks[0]!.type === 'paragraph' && !blocks[0]!.text) return;
   emit('submit', ed().getJSON());
 };
 
@@ -336,7 +352,7 @@ defineExpose({ editor, submit });
       <span class="bw-mono" :class="{ 'bw-over': maxLength && count > maxLength }">{{ fmt(count) }}<template v-if="maxLength"> / {{ fmt(maxLength) }}</template></span>
     </div>
 
-    <Toolbar v-if="variant === 'comment' && editable && commentOpen" variant="comment" @mention="emit('mention')">
+    <Toolbar v-if="variant === 'comment' && editable && commentOpen" variant="comment">
       <template #end>
         <span class="bw-kbd-hint">{{ kbd('⌘↵') }}</span>
         <button type="button" class="bw-btn bw-btn-dark" :disabled="isEmpty" @mousedown.prevent @click="submit">{{ messages.send }}</button>

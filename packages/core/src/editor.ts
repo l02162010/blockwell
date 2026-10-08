@@ -136,10 +136,17 @@ export interface HighlightRange {
 const isMac = typeof navigator !== 'undefined' && /Mac|iP(hone|ad|od)/.test(navigator.platform);
 
 export class Editor {
-  state: EditorState;
-  readonly history = new History();
+  private _state: EditorState;
+
+  /** The current state: document and selection. `editor.state.tr()` starts a transaction for `dispatch()`. */
+  get state(): EditorState {
+    return this._state;
+  }
+  private readonly history = new History();
+  /** The options it was created with. */
   readonly options: EditorOptions;
-  readonly commandOptions: C.CommandOptions;
+  private readonly commandOptions: C.CommandOptions;
+  /** The element the editor is mounted on (`null` before `mount()` and after `destroy()`). */
   dom: HTMLElement | null = null;
 
   private editable: boolean;
@@ -168,14 +175,15 @@ export class Editor {
       // Rendering an invalid document drops whatever the schema does not allow; say so in development.
       if (!v.ok) console.warn('[blockwell] The initial document does not match the schema:', v.errors.slice(0, 5));
     }
-    this.state = EditorState.create(options.doc);
-    const first = textBlocks(this.state.doc)[0];
-    if (first) this.state = new EditorState(this.state.doc, caret(first.id, 0));
+    this._state = EditorState.create(options.doc);
+    const first = textBlocks(this._state.doc)[0];
+    if (first) this._state = new EditorState(this._state.doc, caret(first.id, 0));
   }
 
   // -------------------------------------------------------------------------------------------
   // Events
 
+  /** Listens to an event; returns a function that stops listening. */
   on<K extends keyof EditorEvents>(event: K, fn: Handler<K>): () => void {
     let set = this.listeners.get(event);
     if (!set) this.listeners.set(event, (set = new Set()));
@@ -196,8 +204,9 @@ export class Editor {
   // -------------------------------------------------------------------------------------------
   // Document
 
+  /** The current document. Immutable: every change produces a new object. */
   getJSON(): Doc {
-    return this.state.doc;
+    return this._state.doc;
   }
 
   /** Replaces the whole document as one undoable edit (e.g. restoring an older version). */
@@ -223,22 +232,24 @@ export class Editor {
     if (!validate(doc).ok) return false;
     const state = EditorState.create(doc);
     const first = textBlocks(state.doc)[0];
-    this.state = new EditorState(state.doc, first ? caret(first.id, 0) : null);
+    this._state = new EditorState(state.doc, first ? caret(first.id, 0) : null);
     if (!keepHistory) this.history.clear();
     this.render(true);
     this.emit('update', { editor: this });
     return true;
   }
 
+  /** Whether the document can be edited (see `setEditable`). */
   get isEditable() {
     return this.editable;
   }
 
+  /** Switches between editing and read-only. */
   setEditable(editable: boolean) {
     if (editable === this.editable) return;
     this.editable = editable;
     if (this.dom) {
-      this.dom.contentEditable = String(editable);
+      this.dom.setAttribute('contenteditable', String(editable));
       // Read-only content can still take focus, for ⌘F, ⌘/ and keyboard scrolling.
       if (editable) this.dom.removeAttribute('tabindex');
       else this.dom.tabIndex = 0;
@@ -252,16 +263,17 @@ export class Editor {
   /** Runs a command against a fresh transaction and dispatches it when the command succeeds. */
   run(cmd: (tr: Tr) => boolean, { mergeable = false, seal = false } = {}): boolean {
     if (!this.editable) return false;
-    const tr = this.state.tr();
+    const tr = this._state.tr();
     if (!cmd(tr)) return false;
     tr.mergeable = mergeable;
     if (seal) this.history.seal();
     return this.dispatch(tr);
   }
 
+  /** Applies a transaction built with `editor.state.tr()`. Refused (returns false) when the result does not validate. */
   dispatch(tr: Tr): boolean {
     if (!tr.changed) {
-      if (tr.selection !== this.state.selection) this.setSelection(tr.selection);
+      if (tr.selection !== this._state.selection) this.setSelection(tr.selection);
       return true;
     }
     const res = tr.finish();
@@ -286,7 +298,7 @@ export class Editor {
 
   private apply(state: EditorState, tr: Transaction) {
     this.disarmRule();
-    this.state = state;
+    this._state = state;
     this.storedMarks = null;
     this.render();
     this.updateTriggers();
@@ -296,16 +308,18 @@ export class Editor {
 
   /** Applies a transaction produced elsewhere (a collaborator). It never enters the local undo history. */
   applyRemote(tr: Transaction): boolean {
-    const res = applyTransaction(this.state, { ...tr, selectionAfter: this.state.selection }, 'remote');
+    const res = applyTransaction(this._state, { ...tr, selectionAfter: this._state.selection }, 'remote');
     if (!res.ok) return false;
     this.apply(res.state, res.tr);
     return true;
   }
 
+  /** Undoes the last change; false when there is nothing to undo. */
   undo(): boolean {
     return this.replay('undo');
   }
 
+  /** Redoes the last undone change; false when there is nothing to redo. */
   redo(): boolean {
     return this.replay('redo');
   }
@@ -314,7 +328,7 @@ export class Editor {
     if (!this.editable) return false;
     const tr = kind === 'undo' ? this.history.undo() : this.history.redo();
     if (!tr) return false;
-    const res = applyTransaction(this.state, tr, 'history');
+    const res = applyTransaction(this._state, tr, 'history');
     if (!res.ok) {
       this.history.restore(kind);
       return false;
@@ -326,13 +340,15 @@ export class Editor {
   // -------------------------------------------------------------------------------------------
   // Selection
 
+  /** The current selection: a text range, a selected block (`node`), or null. */
   get selection(): Selection | null {
-    return this.state.selection;
+    return this._state.selection;
   }
 
+  /** Sets the selection (and the DOM selection while the editor has focus). */
   setSelection(sel: Selection | null, { write = true } = {}) {
     this.disarmRule();
-    this.state = new EditorState(this.state.doc, sel);
+    this._state = new EditorState(this._state.doc, sel);
     this.storedMarks = null;
     if (write) this.writeSelection();
     this.updateDecorations();
@@ -341,19 +357,21 @@ export class Editor {
     this.emit('update', { editor: this });
   }
 
+  /** Focuses the editor and restores its selection. */
   focus() {
     if (!this.dom) return;
     this.dom.focus({ preventScroll: true });
     this.writeSelection(true);
   }
 
+  /** Whether the editable element has focus. */
   get hasFocus(): boolean {
     return !!this.dom && this.dom.ownerDocument.activeElement === this.dom;
   }
 
   /** Scrolls the editor (or the page) just enough to show the caret. */
   scrollCaretIntoView() {
-    const sel = this.state.selection;
+    const sel = this._state.selection;
     if (!this.dom || !sel) return;
     // The caret (the focus end of a range), not the whole selected range.
     const r = sel.type === 'text' ? this.rectAt(sel.focus) : this.selectionRect();
@@ -370,14 +388,14 @@ export class Editor {
   /** Bounding rectangle of the current selection, for positioning floating UI. */
   selectionRect(): DOMRect | null {
     if (!this.dom) return null;
-    const sel = this.state.selection;
+    const sel = this._state.selection;
     if (sel?.type === 'node') return this.blockElement(sel.block)?.getBoundingClientRect() ?? null;
     const range = this.domRange();
     if (!range) return null;
-    const rects = range.getClientRects();
+    const rects = clientRects(range);
     if (rects.length > 0) return rects[0]!.width === 0 && rects.length > 1 ? rects[1]! : rects[0]!;
-    const r = range.getBoundingClientRect();
-    if (r.width || r.height) return r;
+    const r = range.getBoundingClientRect?.();
+    if (r && (r.width || r.height)) return r;
     const focus = sel?.type === 'text' ? this.blockElement(sel.focus.block) : null;
     return focus ? (textContainerOf(focus) ?? focus).getBoundingClientRect() : null;
   }
@@ -385,20 +403,21 @@ export class Editor {
   /** Rectangle around the whole selection (first to last line). */
   selectionBounds(): DOMRect | null {
     const range = this.domRange();
-    return range ? range.getBoundingClientRect() : this.selectionRect();
+    return range?.getBoundingClientRect?.() ?? this.selectionRect();
   }
 
+  /** The rendered element of a block, or null (not found, or not rendered in a large document). */
   blockElement(id: string): HTMLElement | null {
     return (this.dom?.querySelector(`[data-block-id="${CSS.escape(id)}"]`) as HTMLElement | null) ?? null;
   }
 
   private domRange(): Range | null {
-    const sel = this.state.selection;
+    const sel = this._state.selection;
     if (!this.dom || !sel || sel.type !== 'text') return null;
     const a = this.posToDom(sel.anchor), f = this.posToDom(sel.focus);
     if (!a || !f) return null;
     const r = this.dom.ownerDocument.createRange();
-    const r2 = selectionRange(this.state.doc, sel)!;
+    const r2 = selectionRange(this._state.doc, sel)!;
     const from = r2.from === sel.anchor ? a : f, to = r2.from === sel.anchor ? f : a;
     r.setStart(from.node, from.offset);
     r.setEnd(to.node, to.offset);
@@ -408,9 +427,10 @@ export class Editor {
   // -------------------------------------------------------------------------------------------
   // State for toolbars
 
+  /** What the toolbar shows: active marks, block kind, link, colours, undo/redo availability and more. */
   activeState(): ActiveState {
-    const doc = this.state.doc;
-    const sel = this.state.selection;
+    const doc = this._state.doc;
+    const sel = this._state.selection;
     const marks = { bold: false, italic: false, underline: false, strike: false, code: false };
     let color: string | null = null, highlight: string | null = null, link: string | null = null;
     let blockKind: BlockKind | null = null;
@@ -435,7 +455,7 @@ export class Editor {
         const l = C.linkAt(fb, r.from.offset);
         link = l ? String(l.attrs?.href ?? '') : null;
       } else {
-        const tr = this.state.tr();
+        const tr = this._state.tr();
         const segs = C.segments(tr).filter((s) => s.to > s.from);
         for (const k of Object.keys(marks) as (keyof typeof marks)[])
           marks[k] = segs.length > 0 && segs.every((s) => rangeHasMark(s.block.marks ?? [], k, s.from, s.to));
@@ -466,21 +486,23 @@ export class Editor {
 
   /** Visible plain text length (entities count as one character). */
   characterCount(): number {
-    return textBlocks(this.state.doc).reduce((n, b) => n + textLength(b), 0);
+    return textBlocks(this._state.doc).reduce((n, b) => n + textLength(b), 0);
   }
 
   // -------------------------------------------------------------------------------------------
   // Commands
 
+  /** Whether this editor may create blocks of `type` (see `allowedBlocks`). */
   allows(type: string) {
     return C.allows(this.commandOptions, type);
   }
 
+  /** Turns a mark on or off for the selection (or for what is typed next when the selection is collapsed). */
   toggleMark(type: 'bold' | 'italic' | 'underline' | 'strike' | 'code'): boolean {
-    const sel = this.state.selection;
+    const sel = this._state.selection;
     if (sel?.type === 'text' && isCollapsed(sel)) {
       // No range: toggle the marks the next typed text gets.
-      const b = getBlock(this.state.doc, sel.focus.block);
+      const b = getBlock(this._state.doc, sel.focus.block);
       if (!b || b.type === 'code') return false;
       const current = this.storedMarks ?? marksAt(b.marks ?? [], sel.focus.offset);
       const has = current.some((m) => m.type === type);
@@ -502,15 +524,16 @@ export class Editor {
     return this.setTokenMark('color', token);
   }
 
+  /** Sets the background colour token on the selection; null removes it. */
   setHighlight(token: string | null): boolean {
     return this.setTokenMark('highlight', token);
   }
 
   private setTokenMark(type: 'color' | 'highlight', token: string | null): boolean {
     if (token !== null && !spec.palette.includes(token)) return false;
-    const sel = this.state.selection;
+    const sel = this._state.selection;
     if (sel?.type === 'text' && isCollapsed(sel)) {
-      const b = getBlock(this.state.doc, sel.focus.block);
+      const b = getBlock(this._state.doc, sel.focus.block);
       if (!b || b.type === 'code') return false;
       const current = (this.storedMarks ?? marksAt(b.marks ?? [], sel.focus.offset)).filter((m) => m.type !== type);
       this.storedMarks = token ? [...current, { type, from: 0, to: 0, attrs: { value: token } }] : current;
@@ -529,14 +552,15 @@ export class Editor {
 
   /** The href of the link at the selection and the range it covers, for link editing UI. */
   linkAtSelection(): { href: string; block: string; from: number; to: number } | null {
-    const sel = this.state.selection;
+    const sel = this._state.selection;
     if (sel?.type !== 'text') return null;
-    const b = getBlock(this.state.doc, sel.focus.block);
+    const b = getBlock(this._state.doc, sel.focus.block);
     if (!b) return null;
     const m = C.linkAt(b, sel.focus.offset);
     return m ? { href: String(m.attrs?.href ?? ''), block: b.id, from: m.from, to: m.to } : null;
   }
 
+  /** Converts the selected blocks to `kind` (paragraph, heading1–3, bullet, ordered, todo, quote, code). */
   setBlockKind(kind: BlockKind): boolean {
     const ok = this.run((tr) => C.setBlockKind(tr, kind, this.commandOptions), { seal: true });
     if (ok) this.emit('format', { what: kind, on: true });
@@ -555,32 +579,39 @@ export class Editor {
     return this.activeState().blockKind === kind && kind !== 'paragraph' ? this.setBlockKind(kind === 'quote' ? 'quote' : 'paragraph') : this.setBlockKind(kind);
   }
 
+  /** Aligns the selected paragraphs and headings. */
   setAlign(align: 'left' | 'center' | 'right'): boolean {
     return this.run((tr) => C.setAlign(tr, align));
   }
 
+  /** Indents the selected list items (with the items nested under them). */
   indent(): boolean {
     const ok = this.run((tr) => C.indentList(tr, 1));
     if (!ok) this.emit('refuse', { reason: 'indent', block: this.focusBlockId() ?? undefined });
     return ok;
   }
 
+  /** Outdents the selected list items (with the items nested under them). */
   outdent(): boolean {
     return this.run((tr) => C.indentList(tr, -1));
   }
 
+  /** Ticks or unticks a to-do item. */
   toggleChecked(block: string): boolean {
     return this.run((tr) => C.toggleChecked(tr, block));
   }
 
+  /** Inserts a divider after the current block; the caret continues in a new paragraph. */
   insertDivider(): boolean {
     return this.run((tr) => C.insertBlock(tr, C.newDivider(), this.commandOptions), { seal: true });
   }
 
+  /** Inserts an empty code block (optionally in `language`) and puts the caret in it. */
   insertCode(language?: string): boolean {
     return this.run((tr) => C.insertBlock(tr, C.newCode(language), this.commandOptions), { seal: true });
   }
 
+  /** Inserts a table; the caret goes to its first cell. */
   insertTable(rows = 3, cols = 3): boolean {
     return this.run((tr) => C.insertBlock(tr, C.newTable(rows, cols), this.commandOptions), { seal: true });
   }
@@ -593,15 +624,17 @@ export class Editor {
     }
     const ok = this.run((tr) => C.insertBlock(tr, C.newImage(attrs), this.commandOptions), { seal: true });
     // Show the new image (it may land below the fold or under a phone's toolbar).
-    const sel = this.state.selection;
-    if (ok && sel?.type === 'node') requestAnimationFrame(() => this.blockElement(sel.block)?.scrollIntoView({ block: 'nearest' }));
+    const sel = this._state.selection;
+    if (ok && sel?.type === 'node') requestAnimationFrame(() => this.blockElement(sel.block)?.scrollIntoView?.({ block: 'nearest' }));
     return ok;
   }
 
+  /** Inserts a mention of `userId` at the caret. The document stores only the id. */
   insertMention(userId: string): boolean {
     return this.run((tr) => C.insertEntity(tr, 'mention', { userId }));
   }
 
+  /** Types text at the caret (replacing a selection), with the marks active there. */
   insertText(text: string): boolean {
     return this.run((tr) => C.insertText(tr, text, this.storedMarks));
   }
@@ -621,13 +654,15 @@ export class Editor {
 
   /** Marks and mentions that converting the selection to `kind` would remove. */
   conversionLoss(kind: BlockKind) {
-    return C.conversionLoss(this.state.tr(), kind);
+    return C.conversionLoss(this._state.tr(), kind);
   }
 
+  /** Sets a code block's language (one of the schema's languages). */
   setCodeLanguage(block: string, language: string): boolean {
     return this.run((tr) => (tr.updateAttrs(block, { language: language === 'plaintext' ? undefined : language }), true));
   }
 
+  /** Changes an image's alt text, width or alignment. */
   setImageAttrs(block: string, patch: { alt?: string; width?: number | null; align?: 'left' | 'center' | 'full' }): boolean {
     return this.run((tr) => {
       const p: Record<string, string | number | undefined> = {};
@@ -639,6 +674,7 @@ export class Editor {
     });
   }
 
+  /** Removes a block. */
   deleteBlock(block: string): boolean {
     return this.run((tr) => {
       tr.setSelection({ type: 'node', block });
@@ -648,9 +684,9 @@ export class Editor {
 
   /** Adds a copy of a top-level block (with new ids) right after it and puts the caret in it. */
   duplicateBlock(block: string): boolean {
-    const loc = locate(this.state.doc, block);
+    const loc = locate(this._state.doc, block);
     if (!loc || loc.parent !== null) return false;
-    const copy = withFreshIds(this.state.doc.blocks[loc.index]!);
+    const copy = withFreshIds(this._state.doc.blocks[loc.index]!);
     return this.run(
       (tr) => {
         tr.insertBlock(null, loc.index + 1, copy);
@@ -662,13 +698,14 @@ export class Editor {
     );
   }
 
+  /** Selects a whole block (an image or divider, typically). */
   selectNode(block: string) {
     this.setSelection({ type: 'node', block });
   }
 
   /** Selects a whole block: atoms as a node, text blocks from start to end, containers across their text. */
   selectBlockContent(block: string) {
-    const b = getBlock(this.state.doc, block);
+    const b = getBlock(this._state.doc, block);
     if (!b) return;
     if (isAtom(b)) return this.setSelection({ type: 'node', block });
     const texts = textBlocks({ version: 1, blocks: [b] });
@@ -680,16 +717,16 @@ export class Editor {
   /** Moves a top-level block so that it ends up at `index` among the top-level blocks. */
   /** Moves a top-level block to `index` (its index afterwards). A list item takes its nested items along. */
   moveBlock(block: string, index: number): boolean {
-    const loc = locate(this.state.doc, block);
+    const loc = locate(this._state.doc, block);
     if (!loc || loc.parent !== null) return false;
-    const target = Math.max(0, Math.min(this.state.doc.blocks.length - 1, index));
+    const target = Math.max(0, Math.min(this._state.doc.blocks.length - 1, index));
     if (target === loc.index) return false;
     return this.moveToSlot(block, target > loc.index ? target + 1 : target);
   }
 
   /** Moves a top-level block one place up or down, past the neighbouring block. */
   moveBlockBy(block: string, dir: 1 | -1): boolean {
-    const loc = locate(this.state.doc, block);
+    const loc = locate(this._state.doc, block);
     if (!loc || loc.parent !== null) return false;
     const n = this.blockGroup(loc.index).length;
     return this.moveToSlot(block, dir < 0 ? loc.index - 1 : loc.index + n + 1);
@@ -697,7 +734,7 @@ export class Editor {
 
   /** A top-level block plus, for a list item, the items nested under it. */
   private blockGroup(index: number): Block[] {
-    const blocks = this.state.doc.blocks;
+    const blocks = this._state.doc.blocks;
     const head = blocks[index]!;
     const group = [head];
     if (head.type === 'listItem') {
@@ -709,13 +746,13 @@ export class Editor {
 
   /** Moves a block's group so that it starts at insertion slot `slot` of the current list (0..length). */
   private moveToSlot(block: string, slot: number): boolean {
-    const loc = locate(this.state.doc, block);
-    const len = this.state.doc.blocks.length;
+    const loc = locate(this._state.doc, block);
+    const len = this._state.doc.blocks.length;
     if (!loc || loc.parent !== null || slot < 0 || slot > len) return false;
     const group = this.blockGroup(loc.index);
     if (slot >= loc.index && slot <= loc.index + group.length) return false;
     const at = slot > loc.index ? slot - group.length : slot;
-    const sel = this.state.selection;
+    const sel = this._state.selection;
     return this.run(
       (tr) => {
         for (const b of group) tr.removeBlock(b.id);
@@ -734,25 +771,30 @@ export class Editor {
     const r = this.dom.ownerDocument.createRange();
     r.setStart(p.node, p.offset);
     r.collapse(true);
-    const rects = r.getClientRects();
+    const rects = clientRects(r);
     if (rects.length) return rects[0]!;
     const el = p.node.nodeType === 1 ? (p.node as Element) : p.node.parentElement;
     const box = el?.getBoundingClientRect();
     return box ? new DOMRect(box.left, box.top, 0, box.height) : null;
   }
 
+  /** Adds a table row before or after the row of `block` (any cell or paragraph in it). */
   addRow(block: string, side: 'before' | 'after') {
     return this.run((tr) => C.addRow(tr, block, side));
   }
+  /** Adds a table column before or after the column of `block`. */
   addColumn(block: string, side: 'before' | 'after') {
     return this.run((tr) => C.addColumn(tr, block, side));
   }
+  /** Deletes the table row of `block` (the whole table when it is the last row). */
   deleteRow(block: string) {
     return this.run((tr) => C.deleteRow(tr, block));
   }
+  /** Deletes the table column of `block`. */
   deleteColumn(block: string) {
     return this.run((tr) => C.deleteColumn(tr, block));
   }
+  /** Moves the table column of `block` one place left or right. */
   moveColumn(block: string, delta: -1 | 1) {
     return this.run((tr) => C.moveColumn(tr, block, delta));
   }
@@ -760,12 +802,12 @@ export class Editor {
   /** Row, column and table of the cell holding the caret. */
   tableContext(block = this.focusBlockId()) {
     if (!block) return null;
-    const ctx = C.cellContext(this.state.tr(), block);
+    const ctx = C.cellContext(this._state.tr(), block);
     return ctx ? { table: ctx.table.id, row: ctx.row, col: ctx.col, rows: ctx.rows.length, cols: ctx.rows[0]?.children?.length ?? 0 } : null;
   }
 
   private focusBlockId(): string | null {
-    const sel = this.state.selection;
+    const sel = this._state.selection;
     return sel?.type === 'text' ? sel.focus.block : sel?.type === 'node' ? sel.block : null;
   }
 
@@ -835,14 +877,17 @@ export class Editor {
   // -------------------------------------------------------------------------------------------
   // Typed triggers: `/` opens the block menu, `@` the mention picker
 
+  /** The open slash menu (where `/` was typed and the query after it), or null. */
   get slash(): SlashState | null {
     return this.triggers.slash;
   }
 
+  /** The open mention picker (where `@` was typed and the query after it), or null. */
   get mention(): SlashState | null {
     return this.triggers.mention;
   }
 
+  /** Closes the slash menu. When it was opened by a button (+), the `/` it typed is removed again. */
   closeSlash() {
     const s = this.triggers.slash;
     this.closeTrigger('slash');
@@ -851,14 +896,15 @@ export class Editor {
       this.undo();
       return;
     }
-    const b = s?.temporary ? getBlock(this.state.doc, s.block) : null;
+    const b = s?.temporary ? getBlock(this._state.doc, s.block) : null;
     if (s && b && (b.text ?? '')[s.from] === '/') {
-      const sel = this.state.selection;
+      const sel = this._state.selection;
       const end = sel?.type === 'text' && sel.focus.block === s.block ? Math.max(sel.focus.offset, s.from + 1) : s.from + 1 + s.query.length;
       this.run((tr) => (tr.deleteText(s.block, s.from, end), tr.setSelection(caret(s.block, s.from)), true), { seal: true });
     }
   }
 
+  /** Closes the mention picker, leaving the typed text. */
   closeMention() {
     this.closeTrigger('mention');
   }
@@ -874,7 +920,7 @@ export class Editor {
     const s = this.triggers[kind];
     if (!s) return null;
     this.closeTrigger(kind);
-    const sel = this.state.selection;
+    const sel = this._state.selection;
     const end = sel?.type === 'text' && sel.focus.block === s.block ? sel.focus.offset : s.from + 1 + s.query.length;
     this.run(
       (tr) => {
@@ -903,8 +949,8 @@ export class Editor {
   startMention() {
     if (!this.options.mentions) return;
     if (!this.hasFocus) this.focus();
-    const sel = this.state.selection;
-    const b = sel?.type === 'text' ? getBlock(this.state.doc, sel.focus.block) : null;
+    const sel = this._state.selection;
+    const b = sel?.type === 'text' ? getBlock(this._state.doc, sel.focus.block) : null;
     const prev = b && sel?.type === 'text' ? (b.text ?? '')[sel.focus.offset - 1] : undefined;
     if (prev && /[\x21-\x7E]/.test(prev)) this.insertText(' ');
     if (!this.insertText('@')) return;
@@ -913,7 +959,7 @@ export class Editor {
 
   /** The + handle: a new line after `block` with the slash menu open on it, in one undo step. */
   insertSlashAfter(block: string): boolean {
-    const loc = locate(this.state.doc, block);
+    const loc = locate(this._state.doc, block);
     if (!loc) return false;
     const id = newId();
     const ok = this.run(
@@ -942,8 +988,8 @@ export class Editor {
     for (const kind of ['slash', 'mention'] as const) {
       const s = this.triggers[kind];
       if (!s) continue;
-      const sel = this.state.selection;
-      const b = getBlock(this.state.doc, s.block);
+      const sel = this._state.selection;
+      const b = getBlock(this._state.doc, s.block);
       const ok =
         this.editable &&
         sel?.type === 'text' &&
@@ -969,9 +1015,9 @@ export class Editor {
   }
 
   private maybeOpenTrigger() {
-    const sel = this.state.selection;
+    const sel = this._state.selection;
     if (sel?.type !== 'text' || !isCollapsed(sel)) return;
-    const b = getBlock(this.state.doc, sel.focus.block);
+    const b = getBlock(this._state.doc, sel.focus.block);
     if (!b || b.type === 'code') return;
     const at = sel.focus.offset - 1;
     const text = b.text ?? '';
@@ -988,6 +1034,7 @@ export class Editor {
   // -------------------------------------------------------------------------------------------
   // Uploads
 
+  /** Image uploads in progress or failed. */
   get uploads(): readonly Upload[] {
     return this.uploadList;
   }
@@ -998,7 +1045,7 @@ export class Editor {
     if (!upload || !this.allows('image')) return;
     for (const file of files.filter((f) => f.type.startsWith('image/'))) {
       const item: Upload = { id: newId(), name: file.name, progress: 0 };
-      const anchor = this.state.selection;
+      const anchor = this._state.selection;
       this.uploadList = [...this.uploadList, item];
       this.emit('uploads', { uploads: this.uploadList });
       const patch = (p: Partial<Upload>) => {
@@ -1009,13 +1056,14 @@ export class Editor {
         .then((res) => {
           this.uploadList = this.uploadList.filter((u) => u.id !== item.id);
           this.emit('uploads', { uploads: this.uploadList });
-          if (anchor && !this.state.selection) this.setSelection(anchor, { write: false });
+          if (anchor && !this._state.selection) this.setSelection(anchor, { write: false });
           if (!this.insertImage({ ...res, alt: res.alt ?? file.name.replace(/\.[^.]+$/, '') })) patch({ error: 'rejected' });
         })
         .catch((e: unknown) => patch({ error: String((e as Error)?.message ?? e) }));
     }
   }
 
+  /** Removes a failed upload from `uploads`. */
   dismissUpload(id: string) {
     this.uploadList = this.uploadList.filter((u) => u.id !== id);
     this.emit('uploads', { uploads: this.uploadList });
@@ -1035,12 +1083,13 @@ export class Editor {
   // -------------------------------------------------------------------------------------------
   // View
 
+  /** Renders the editor into `root` and starts handling input there. */
   mount(root: HTMLElement) {
     if (this.dom) this.destroy();
     this.dom = root;
     root.classList.add('bw-editor');
     root.classList.toggle('bw-readonly', !this.editable);
-    root.contentEditable = String(this.editable);
+    root.setAttribute('contenteditable', String(this.editable));
     if (!this.editable) root.tabIndex = 0;
     root.setAttribute('role', 'textbox');
     root.setAttribute('aria-multiline', 'true');
@@ -1093,6 +1142,7 @@ export class Editor {
     });
   }
 
+  /** Stops handling input and removes listeners; the DOM is left as it was. */
   destroy() {
     publishHighlights(this, null);
     this.teardown.forEach((f) => f());
@@ -1126,10 +1176,10 @@ export class Editor {
     this.renderPending = false;
     if (full) this.rendered.clear();
     const ctx = this.ctx();
-    const numbers = listNumbers(this.state.doc.blocks);
+    const numbers = listNumbers(this._state.doc.blocks);
     const next = new Map<string, { block: Block; el: HTMLElement; num: number | undefined }>();
     const desired: HTMLElement[] = [];
-    const blocks = this.state.doc.blocks;
+    const blocks = this._state.doc.blocks;
     const [start, end] = this.windowRange();
     if (start > 0) desired.push(this.spacer('top', this.heightOf(0, start)));
     for (let i = start; i < end; i++) {
@@ -1170,12 +1220,12 @@ export class Editor {
 
   /** True while only part of the document is in the DOM. */
   get virtual(): boolean {
-    return !this.printing && this.state.doc.blocks.length > (this.options.virtualizeAbove ?? 2000);
+    return !this.printing && this._state.doc.blocks.length > (this.options.virtualizeAbove ?? 2000);
   }
 
   /** Block counts for status displays. */
   stats() {
-    return { blocks: allBlocks(this.state.doc).length, topLevel: this.state.doc.blocks.length, virtual: this.virtual, rendered: this.rendered.size };
+    return { blocks: allBlocks(this._state.doc).length, topLevel: this._state.doc.blocks.length, virtual: this.virtual, rendered: this.rendered.size };
   }
 
   private estimate(id: string) {
@@ -1184,7 +1234,7 @@ export class Editor {
 
   private heightOf(from: number, to: number) {
     let h = 0;
-    const blocks = this.state.doc.blocks;
+    const blocks = this._state.doc.blocks;
     for (let i = from; i < to; i++) h += this.estimate(blocks[i]!.id);
     return h;
   }
@@ -1215,7 +1265,7 @@ export class Editor {
 
   /** Indices [start, end) of the top-level blocks to render. */
   private windowRange(): [number, number] {
-    const blocks = this.state.doc.blocks;
+    const blocks = this._state.doc.blocks;
     if (!this.virtual || !this.dom) return [0, blocks.length];
     const root = this.dom.getBoundingClientRect();
     const sp = this.scrollParent();
@@ -1244,9 +1294,9 @@ export class Editor {
 
   private topIndexOf(id: string | null): number | null {
     if (!id) return null;
-    const chain = [getBlock(this.state.doc, id), ...ancestors(this.state.doc, id)].filter(Boolean) as Block[];
+    const chain = [getBlock(this._state.doc, id), ...ancestors(this._state.doc, id)].filter(Boolean) as Block[];
     const top = chain[chain.length - 1];
-    return top ? (locate(this.state.doc, top.id)?.index ?? null) : null;
+    return top ? (locate(this._state.doc, top.id)?.index ?? null) : null;
   }
 
   private scheduleMeasure() {
@@ -1266,7 +1316,7 @@ export class Editor {
     this.scrollFrame = requestAnimationFrame(() => {
       this.scrollFrame = 0;
       const [start, end] = this.windowRange();
-      const blocks = this.state.doc.blocks;
+      const blocks = this._state.doc.blocks;
       if (this.rendered.has(blocks[start]?.id ?? '') && this.rendered.has(blocks[end - 1]?.id ?? '') && this.rendered.size === end - start) return;
       this.render();
     });
@@ -1294,7 +1344,7 @@ export class Editor {
     if (opts.select) {
       // Jumping somewhere means continuing to work there: the editor takes focus.
       if (!this.hasFocus) this.dom?.focus({ preventScroll: true });
-      const b = getBlock(this.state.doc, id);
+      const b = getBlock(this._state.doc, id);
       if (b && isText(b)) this.setSelection(caret(id, 0));
       else if (b && isAtom(b)) this.setSelection({ type: 'node', block: id });
     }
@@ -1304,7 +1354,7 @@ export class Editor {
   private scrollToElement(el: HTMLElement) {
     const sp = this.scrollParent();
     if (!sp) {
-      el.scrollIntoView({ block: 'center' });
+      el.scrollIntoView?.({ block: 'center' });
       return;
     }
     const r = el.getBoundingClientRect(), v = sp.getBoundingClientRect();
@@ -1317,6 +1367,7 @@ export class Editor {
 
   private searchState: { query: string; matches: HighlightRange[]; index: number } | null = null;
 
+  /** The current search: query, number of matches and the current match, or null. */
   get search() {
     const s = this.searchState;
     return s ? { query: s.query, count: s.matches.length, index: s.index } : null;
@@ -1327,7 +1378,7 @@ export class Editor {
     if (!query) return this.clearSearch();
     const q = query.toLocaleLowerCase();
     const matches: HighlightRange[] = [];
-    for (const b of textBlocks(this.state.doc)) {
+    for (const b of textBlocks(this._state.doc)) {
       const text = (b.text ?? '').toLocaleLowerCase();
       for (let i = text.indexOf(q); i >= 0 && matches.length < 10_000; i = text.indexOf(q, i + q.length)) matches.push({ block: b.id, from: i, to: i + q.length });
     }
@@ -1335,6 +1386,7 @@ export class Editor {
     this.showMatch();
   }
 
+  /** Moves to the next (or previous) search match, wrapping around. */
   findNext(dir: 1 | -1 = 1) {
     const s = this.searchState;
     if (!s || !s.matches.length) return;
@@ -1344,9 +1396,9 @@ export class Editor {
 
   /** The selected text when the selection is inside one block (e.g. to seed a search), else ''. */
   selectedText(): string {
-    const sel = this.state.selection;
+    const sel = this._state.selection;
     if (sel?.type !== 'text' || sel.anchor.block !== sel.focus.block) return '';
-    const b = getBlock(this.state.doc, sel.focus.block);
+    const b = getBlock(this._state.doc, sel.focus.block);
     const [from, to] = [sel.anchor.offset, sel.focus.offset].sort((x, y) => x - y);
     return (b?.text ?? '').slice(from, to).replace(/\uFFFC/g, '');
   }
@@ -1354,11 +1406,12 @@ export class Editor {
   /** Selects the current search match, e.g. when the search bar closes. */
   selectSearchMatch(): boolean {
     const cur = this.searchState?.matches[this.searchState.index];
-    if (!cur || !getBlock(this.state.doc, cur.block)) return false;
+    if (!cur || !getBlock(this._state.doc, cur.block)) return false;
     this.setSelection({ type: 'text', anchor: { block: cur.block, offset: cur.from }, focus: { block: cur.block, offset: cur.to } });
     return true;
   }
 
+  /** Ends the search and removes its highlights. */
   clearSearch() {
     this.searchState = null;
     this.setHighlights('search', []);
@@ -1383,10 +1436,10 @@ export class Editor {
     this.placeholderEl?.classList.remove('bw-placeholder');
     this.placeholderEl?.removeAttribute('data-placeholder');
     this.placeholderEl = null;
-    const sel = this.state.selection;
+    const sel = this._state.selection;
     if (sel?.type === 'node') this.blockElement(sel.block)?.classList.add('bw-selected');
     if (!this.editable) return;
-    const blocks = this.state.doc.blocks;
+    const blocks = this._state.doc.blocks;
     const onlyEmpty = blocks.length === 1 && blocks[0]!.type === 'paragraph' && !blocks[0]!.text;
     let target: HTMLElement | null = null;
     let text: string | undefined;
@@ -1394,11 +1447,11 @@ export class Editor {
       target = this.blockElement(blocks[0]!.id);
       text = this.options.emptyPlaceholder ?? this.options.placeholder;
     } else if (this.hasFocus && sel?.type === 'text' && isCollapsed(sel)) {
-      const b = getBlock(this.state.doc, sel.focus.block);
-      const parent = locate(this.state.doc, sel.focus.block)?.parent;
-      const inCell = parent ? getBlock(this.state.doc, parent)?.type === 'tableCell' : false;
+      const b = getBlock(this._state.doc, sel.focus.block);
+      const parent = locate(this._state.doc, sel.focus.block)?.parent;
+      const inCell = parent ? getBlock(this._state.doc, parent)?.type === 'tableCell' : false;
       if (b && isText(b) && !b.text && !inCell && b.type !== 'code') {
-        const kind = C.kindOf(b, parent ? getBlock(this.state.doc, parent) : null);
+        const kind = C.kindOf(b, parent ? getBlock(this._state.doc, parent) : null);
         target = this.blockElement(b.id);
         text = b.type === 'paragraph' && kind !== 'quote' ? this.options.placeholder : (kind && this.options.placeholders?.[kind]) || undefined;
       }
@@ -1424,7 +1477,7 @@ export class Editor {
     if (!force && !this.hasFocus) return;
     const domSel = root.ownerDocument.getSelection();
     if (!domSel) return;
-    const sel = this.state.selection;
+    const sel = this._state.selection;
     if (!sel) return;
     if (sel.type === 'node') {
       const e = this.blockElement(sel.block);
@@ -1440,7 +1493,7 @@ export class Editor {
     if ((!a || !f) && this.virtual) {
       // Part of the selection is not rendered (select all in a large document): show the rendered
       // part and keep the model selection as the truth until the user changes it.
-      const r = selectionRange(this.state.doc, sel);
+      const r = selectionRange(this._state.doc, sel);
       const shown = Array.from(root.querySelectorAll('[data-bw-text]'));
       const edge = (c: Element | undefined, end: boolean) => (c ? offsetToDom(c as HTMLElement, end ? containerText(c as HTMLElement).length : 0) : null);
       const fwd = !r || (r.from.block === sel.anchor.block && r.from.offset === sel.anchor.offset);
@@ -1461,7 +1514,7 @@ export class Editor {
   /** Maps a DOM point to a model position or a node selection. */
   private resolvePoint(node: Node, offset: number): Pos | { node: string } | null {
     const root = this.dom!;
-    const doc = this.state.doc;
+    const doc = this._state.doc;
     const blockEl = blockElementOf(node, root);
     if (blockEl) {
       const id = blockEl.getAttribute('data-block-id')!;
@@ -1498,7 +1551,7 @@ export class Editor {
     const ds = root.ownerDocument.getSelection();
     if (!ds || !ds.anchorNode || !ds.focusNode || !root.contains(ds.anchorNode) || !root.contains(ds.focusNode)) return null;
     // A node selection written by us maps back to itself.
-    const cur = this.state.selection;
+    const cur = this._state.selection;
     if (cur?.type === 'node' && ds.rangeCount > 0) {
       const e = this.blockElement(cur.block);
       const r = ds.getRangeAt(0);
@@ -1511,8 +1564,8 @@ export class Editor {
     const toPos = (p: Pos | { node: string }, edge: 'start' | 'end'): Pos | null => {
       if (!('node' in p)) return p;
       // A range touching an atom snaps to the nearest text.
-      const list = textBlocks(this.state.doc);
-      const order = allBlocks(this.state.doc);
+      const list = textBlocks(this._state.doc);
+      const order = allBlocks(this._state.doc);
       const idx = order.findIndex((b) => b.id === p.node);
       const near = edge === 'start' ? list.find((b) => order.findIndex((x) => x.id === b.id) > idx) : [...list].reverse().find((b) => order.findIndex((x) => x.id === b.id) < idx);
       return near ? { block: near.id, offset: edge === 'start' ? 0 : textLength(near) } : null;
@@ -1539,15 +1592,15 @@ export class Editor {
     if (!ds?.anchorNode || !this.dom.contains(ds.anchorNode)) return;
     if (this.domShowsModelOnly(ds)) return;
     const sel = this.readSelection();
-    if (!sel || sameSelection(sel, this.state.selection)) return;
+    if (!sel || sameSelection(sel, this._state.selection)) return;
     this.setSelection(sel, { write: false });
   }
 
   private syncSelection() {
     if (this.dom && this.domShowsModelOnly(this.dom.ownerDocument.getSelection())) return;
     const sel = this.readSelection();
-    if (sel && !sameSelection(sel, this.state.selection)) {
-      this.state = new EditorState(this.state.doc, sel);
+    if (sel && !sameSelection(sel, this._state.selection)) {
+      this._state = new EditorState(this._state.doc, sel);
       this.storedMarks = null;
     }
   }
@@ -1620,32 +1673,32 @@ export class Editor {
     const r = e.getTargetRanges?.()[0];
     if (!r) return;
     const a = this.resolvePoint(r.startContainer, r.startOffset), b = this.resolvePoint(r.endContainer, r.endOffset);
-    if (a && b && !('node' in a) && !('node' in b)) this.state = new EditorState(this.state.doc, { type: 'text', anchor: a, focus: b });
+    if (a && b && !('node' in a) && !('node' in b)) this._state = new EditorState(this._state.doc, { type: 'text', anchor: a, focus: b });
   }
 
   private typeText(data: string) {
     if (!data) return;
-    const sel = this.state.selection;
+    const sel = this._state.selection;
     if (sel?.type === 'node') {
       // Typing on a selected atom starts a paragraph after it.
       if (!this.run((tr) => C.splitBlock(tr))) return;
     }
-    const collapsed = isCollapsed(this.state.selection);
+    const collapsed = isCollapsed(this._state.selection);
     if (!this.run((tr) => C.insertText(tr, data, this.storedMarks), { mergeable: collapsed && data.length === 1 && data !== ' ' })) return;
     if (data === '/' || data === '@') this.maybeOpenTrigger();
-    const tr = this.state.tr();
+    const tr = this._state.tr();
     const marker = runInputRules(tr, this.commandOptions);
     if (marker) {
       this.closeTrigger('slash');
       this.history.seal();
       const inline = !/ $|^---$/.test(marker);
       if (this.dispatch(tr)) {
-        const sel = this.state.selection;
+        const sel = this._state.selection;
         const block = sel?.type === 'text' ? sel.focus.block : null;
         if (inline) {
           // `**bold**` applies bold to what is inside; what is typed next is plain again.
           const type = marker.endsWith('**') || marker.endsWith('__') ? 'bold' : marker.endsWith('~~') ? 'strike' : marker.endsWith('`') ? 'code' : 'italic';
-          const b = block ? getBlock(this.state.doc, block) : null;
+          const b = block ? getBlock(this._state.doc, block) : null;
           if (b && sel?.type === 'text') this.storedMarks = marksAt(b.marks ?? [], sel.focus.offset).filter((m) => m.type !== type);
         } else {
           // Backspace right away turns the block back into text with the marker (engine guide §4).
@@ -1658,7 +1711,7 @@ export class Editor {
   }
 
   private handleDelete(e: InputEvent) {
-    const sel = this.state.selection;
+    const sel = this._state.selection;
     if (!sel) return;
     const backward = e.inputType.includes('Backward') || e.inputType === 'deleteByCut' || e.inputType === 'deleteContent';
     if (sel.type === 'node' || !isCollapsed(sel)) {
@@ -1666,7 +1719,7 @@ export class Editor {
       return;
     }
     const pos = sel.focus;
-    const b = getBlock(this.state.doc, pos.block);
+    const b = getBlock(this._state.doc, pos.block);
     if (!b) return;
     const len = textLength(b);
     // The browser's idea of the range (a word, a grapheme cluster), when it stays inside this block.
@@ -1711,7 +1764,7 @@ export class Editor {
   private onCompositionStart() {
     if (!this.editable) return;
     this.syncSelection();
-    const sel = this.state.selection;
+    const sel = this._state.selection;
     if (sel?.type === 'text' && !isCollapsed(sel) && sel.anchor.block !== sel.focus.block) {
       // Engine guide §7: replace a multi-block selection before the IME writes into the DOM.
       this.run((tr) => C.deleteSelection(tr), { seal: true });
@@ -1740,13 +1793,13 @@ export class Editor {
     const focusEl = ds?.focusNode ? blockElementOf(ds.focusNode, root) : null;
     const ids = new Set<string>();
     if (focusEl) ids.add(focusEl.getAttribute('data-block-id')!);
-    const cur = this.state.selection;
+    const cur = this._state.selection;
     if (cur?.type === 'text') ids.add(cur.focus.block);
     let changed = false;
-    const tr = this.state.tr();
+    const tr = this._state.tr();
     let caretPos: Pos | null = null;
     for (const id of ids) {
-      const b = getBlock(this.state.doc, id);
+      const b = getBlock(this._state.doc, id);
       const e = this.blockElement(id);
       const c = e && textContainerOf(e);
       if (!b || !isText(b) || !c) continue;
@@ -1779,7 +1832,7 @@ export class Editor {
     if (caretPos) tr.setSelection(caret(caretPos.block, Math.min(caretPos.offset, textLength(tr.block(caretPos.block)))));
     // The DOM already shows the text; re-render the block anyway so its structure is ours again.
     for (const id of ids) {
-      const top = [getBlock(this.state.doc, id), ...ancestors(this.state.doc, id)].filter(Boolean).pop();
+      const top = [getBlock(this._state.doc, id), ...ancestors(this._state.doc, id)].filter(Boolean).pop();
       if (top) this.rendered.delete(top.id);
     }
     this.dispatch(tr);
@@ -1788,6 +1841,8 @@ export class Editor {
 
   private onKeyDown(e: KeyboardEvent) {
     if (e.isComposing || e.keyCode === 229) return;
+    // selectionchange arrives asynchronously; a fast key press must see where the caret is now.
+    this.syncSelection();
     for (const h of this.keyHandlers) {
       if (h(e)) {
         e.preventDefault();
@@ -1796,7 +1851,7 @@ export class Editor {
     }
     const mod = isMac ? e.metaKey : e.ctrlKey;
     const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
-    const sel = this.state.selection;
+    const sel = this._state.selection;
 
     if (e.key === 'Escape') {
       this.emit('action', { type: 'escape' });
@@ -1828,7 +1883,7 @@ export class Editor {
       }
       if (this.virtual && !e.shiftKey && (key === 'a' || e.key === 'Home' || e.key === 'End')) {
         // The browser only knows the rendered blocks; do these on the model instead.
-        const texts = textBlocks(this.state.doc);
+        const texts = textBlocks(this._state.doc);
         const first = texts[0], last = texts.at(-1);
         if (first && last) {
           e.preventDefault();
@@ -1844,8 +1899,8 @@ export class Editor {
       }
       if (key === 'a' && !e.shiftKey && sel?.type === 'text') {
         // In a code block or table cell, the first Mod-A selects just that block's text.
-        const b = getBlock(this.state.doc, sel.focus.block);
-        const boxed = b && (b.type === 'code' || ancestors(this.state.doc, b.id).some((a) => a.type === 'tableCell'));
+        const b = getBlock(this._state.doc, sel.focus.block);
+        const boxed = b && (b.type === 'code' || ancestors(this._state.doc, b.id).some((a) => a.type === 'tableCell'));
         const len = b ? textLength(b) : 0;
         const whole = sel.anchor.block === sel.focus.block && Math.min(sel.anchor.offset, sel.focus.offset) === 0 && Math.max(sel.anchor.offset, sel.focus.offset) === len;
         if (boxed && len > 0 && !whole) {
@@ -1897,8 +1952,8 @@ export class Editor {
     }
 
     if (sel?.type === 'text' && isCollapsed(sel)) {
-      const b = getBlock(this.state.doc, sel.focus.block);
-      const top = b && [b, ...ancestors(this.state.doc, b.id)].pop()!;
+      const b = getBlock(this._state.doc, sel.focus.block);
+      const top = b && [b, ...ancestors(this._state.doc, b.id)].pop()!;
       const inBox = !!top && (top.type === 'code' || top.type === 'table' || top.type === 'quote');
       // Mod-Enter ticks a to-do.
       if (e.key === 'Enter' && mod && !e.shiftKey && b?.type === 'listItem' && b.attrs?.style === 'todo') {
@@ -1916,7 +1971,7 @@ export class Editor {
       // jumping over it.
       if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && !e.shiftKey && !mod && !e.altKey && b && top && top.type !== 'table') {
         const down = e.key === 'ArrowDown';
-        const all = this.state.doc.blocks;
+        const all = this._state.doc.blocks;
         const i = all.indexOf(top);
         const neighbour = all[i + (down ? 1 : -1)];
         const lastOfTop = textBlocks({ version: 1, blocks: [top] });
@@ -1930,7 +1985,7 @@ export class Editor {
       // Up and down in a table go to the cell above or below, not the one beside.
       if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && !e.shiftKey && !mod && !e.altKey && top?.type === 'table' && b) {
         const down = e.key === 'ArrowDown';
-        const ctx = C.cellContext(this.state.tr(), b.id);
+        const ctx = C.cellContext(this._state.tr(), b.id);
         const own = ctx ? textBlocks({ version: 1, blocks: [ctx.rows[ctx.row]!.children![ctx.col]!] }) : [];
         const edgeBlock = down ? own.at(-1) : own[0];
         if (ctx && edgeBlock?.id === b.id && this.onEdgeLine(b, sel.focus.offset, down)) {
@@ -1943,7 +1998,7 @@ export class Editor {
             return;
           }
           // Past the last (or first) row: on to the block after (or before) the table.
-          const all = this.state.doc.blocks;
+          const all = this._state.doc.blocks;
           const beside = all[all.indexOf(top) + (down ? 1 : -1)];
           e.preventDefault();
           if (!beside) {
@@ -1957,7 +2012,7 @@ export class Editor {
           return;
         }
       }
-      if (inBox && (e.key === 'ArrowDown' || e.key === 'ArrowRight') && !e.shiftKey && !mod && top === this.state.doc.blocks.at(-1) && this.atDocEnd(b!, sel.focus.offset, e.key)) {
+      if (inBox && (e.key === 'ArrowDown' || e.key === 'ArrowRight') && !e.shiftKey && !mod && top === this._state.doc.blocks.at(-1) && this.atDocEnd(b!, sel.focus.offset, e.key)) {
         e.preventDefault();
         this.run((tr) => C.exitBlock(tr, b!.id), { seal: true });
         return;
@@ -1965,8 +2020,8 @@ export class Editor {
     }
 
     if (sel?.type === 'node') {
-      const order = textBlocks(this.state.doc);
-      const all = allBlocks(this.state.doc);
+      const order = textBlocks(this._state.doc);
+      const all = allBlocks(this._state.doc);
       const idx = all.findIndex((b) => b.id === sel.block);
       if (e.key === 'Backspace' || e.key === 'Delete') {
         e.preventDefault();
@@ -1993,7 +2048,7 @@ export class Editor {
    */
   focusEnd() {
     if (!this.hasFocus) this.dom?.focus({ preventScroll: true });
-    const last = this.state.doc.blocks.at(-1);
+    const last = this._state.doc.blocks.at(-1);
     if (!last || !this.editable) return;
     if (last.type === 'paragraph') this.setSelection(caret(last.id, textLength(last)));
     else this.run((tr) => C.exitBlock(tr, last.id), { seal: true });
@@ -2014,7 +2069,7 @@ export class Editor {
 
   /** Whether the caret is on the last visual line of the last text block (any column for ArrowDown). */
   private atDocEnd(b: Block, offset: number, key: string): boolean {
-    if (textBlocks(this.state.doc).at(-1)?.id !== b.id) return false;
+    if (textBlocks(this._state.doc).at(-1)?.id !== b.id) return false;
     if (key === 'ArrowRight') return offset === textLength(b);
     return this.onEdgeLine(b, offset, true);
   }
@@ -2022,9 +2077,9 @@ export class Editor {
   private moveCell(block: string, delta: 1 | -1) {
     const ctx = this.tableContext(block);
     if (!ctx) return;
-    const table = getBlock(this.state.doc, ctx.table)!;
+    const table = getBlock(this._state.doc, ctx.table)!;
     const cells = textBlocks({ version: 1, blocks: [table] });
-    const cellOf = (id: string) => ancestors(this.state.doc, id).find((b) => b.type === 'tableCell')?.id;
+    const cellOf = (id: string) => ancestors(this._state.doc, id).find((b) => b.type === 'tableCell')?.id;
     const firsts = cells.filter((c, i) => i === 0 || cellOf(cells[i - 1]!.id) !== cellOf(c.id));
     const i = firsts.findIndex((c) => cellOf(c.id) === cellOf(block));
     const target = firsts[i + delta];
@@ -2048,7 +2103,7 @@ export class Editor {
     }
     if (!blockEl && this.editable && target === this.dom) {
       // A click in the empty space below the content puts the caret in a trailing paragraph.
-      const last = this.state.doc.blocks.at(-1);
+      const last = this._state.doc.blocks.at(-1);
       const lastEl = last && this.blockElement(last.id);
       if (last && lastEl && e.clientY > lastEl.getBoundingClientRect().bottom) {
         e.preventDefault();
@@ -2057,7 +2112,7 @@ export class Editor {
       }
     }
     if (blockEl && this.editable) {
-      const b = getBlock(this.state.doc, blockEl.getAttribute('data-block-id')!);
+      const b = getBlock(this._state.doc, blockEl.getAttribute('data-block-id')!);
       if (b && isAtom(b)) {
         e.preventDefault();
         if (!this.hasFocus) this.dom?.focus({ preventScroll: true });
@@ -2077,7 +2132,7 @@ export class Editor {
       if (name === 'toggle-check') this.toggleChecked(owner);
       else if (name === 'code-language' && this.editable) this.emit('action', { type: 'code-language', block: owner });
       else if (name === 'code-copy') {
-        const text = getBlock(this.state.doc, owner)?.text ?? '';
+        const text = getBlock(this._state.doc, owner)?.text ?? '';
         void navigator.clipboard?.writeText(text);
         action.classList.add('bw-copied');
         action.textContent = this.options.copiedLabel ?? '';
@@ -2086,7 +2141,7 @@ export class Editor {
           action.textContent = '';
         }, 1600);
       } else if (name === 'table-add-row' || name === 'table-add-col') {
-        const table = getBlock(this.state.doc, owner);
+        const table = getBlock(this._state.doc, owner);
         const rows = table?.children ?? [];
         const lastRow = rows[rows.length - 1];
         const lastCell = lastRow?.children?.[lastRow.children.length - 1];
@@ -2140,8 +2195,8 @@ export class Editor {
 
   /** The selected content as a standalone document. */
   sliceSelection(): Doc | null {
-    const doc = this.state.doc;
-    const sel = this.state.selection;
+    const doc = this._state.doc;
+    const sel = this._state.selection;
     if (!sel) return null;
     if (sel.type === 'node') {
       const b = getBlock(doc, sel.block);
@@ -2251,13 +2306,13 @@ export class Editor {
       return;
     }
     const plain = data.getData('text/plain');
-    const focus = this.state.selection?.type === 'text' ? getBlock(this.state.doc, this.state.selection.focus.block) : null;
+    const focus = this._state.selection?.type === 'text' ? getBlock(this._state.doc, this._state.selection.focus.block) : null;
     if (focus?.type === 'code') {
       this.run((tr) => C.insertText(tr, plain.replace(/\r\n?/g, '\n'), null), { seal: true });
       return;
     }
     // A URL pasted over selected words links them instead of replacing them.
-    const sel0 = this.state.selection;
+    const sel0 = this._state.selection;
     const url = plain.trim();
     if (sel0?.type === 'text' && !isCollapsed(sel0) && sel0.anchor.block === sel0.focus.block && !/\s/.test(url) && isSafeUrl(url, C.LINK_SCHEMES)) {
       this.setLink(url);
@@ -2285,7 +2340,7 @@ export class Editor {
     // A rejected image gets its own note (with an upload button); no second message for it.
     const onlyImage = r.source === 'html' && imageRejected && r.droppedAttrs.length === 0 && r.unknownElements === 0;
     if (noteworthy && !onlyImage) this.emit('paste', { report: r });
-    const sel = this.state.selection;
+    const sel = this._state.selection;
     const block = sel?.type === 'text' ? sel.focus.block : undefined;
     if (r.skipped) this.emit('feedback', { level: 'skip', code: 'unsupported', count: r.skipped, block });
     if (imageRejected) this.emit('feedback', { level: 'reject', code: 'image-src', block });
@@ -2350,3 +2405,8 @@ function sameSelection(a: Selection | null, b: Selection | null): boolean {
 
 const isHigh = (c: number) => c >= 0xd800 && c <= 0xdbff;
 const isLow = (c: number) => c >= 0xdc00 && c <= 0xdfff;
+
+/** A range's line boxes; empty where the DOM has no layout (jsdom, server rendering). */
+function clientRects(range: Range): DOMRect[] {
+  return typeof range.getClientRects === 'function' ? Array.from(range.getClientRects()) : [];
+}
