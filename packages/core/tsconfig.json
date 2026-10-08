@@ -3,7 +3,7 @@
   "compilerOptions": {
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "types": ["node"],
-    "paths": { "@blockwell/schema": ["../schema/src/index.ts"] }
+    "paths": { "@blockwell/schema": ["../schema/src/index.ts"], "@blockwell/core": ["./src/index.ts"] }
   },
   "include": ["src", "test"]
 }
