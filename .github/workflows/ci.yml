@@ -45,8 +45,13 @@ jobs:
         run: pnpm smoke
 
   e2e:
-    # Every demo on the website and the playground, driven in Chromium.
+    # Every demo on the website and the playground, in each browser engine.
+    name: e2e (${{ matrix.engine }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        engine: [chromium, firefox, webkit]
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -55,16 +60,17 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm exec playwright install --with-deps ${{ matrix.engine }}
         working-directory: apps/playground
       - run: pnpm exec playwright test
         working-directory: apps/playground
         env:
           CI: '1'
+          PW_BROWSERS: ${{ matrix.engine }}
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
-          name: playwright-results
+          name: playwright-${{ matrix.engine }}
           path: apps/playground/test-results
 
   go:

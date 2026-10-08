@@ -1216,6 +1216,7 @@ export class Editor {
   private pinned: number | null = null;
   private measureFrame = 0;
   private caretFrame = 0;
+  private compositionTimer = 0;
   private scrollFrame = 0;
 
   /** True while only part of the document is in the DOM. */
@@ -1613,7 +1614,9 @@ export class Editor {
       e.preventDefault();
       return;
     }
-    if (this.composing || e.isComposing || e.inputType === 'insertCompositionText' || e.inputType === 'deleteCompositionText') return;
+    if (e.isComposing || e.inputType === 'insertCompositionText' || e.inputType === 'deleteCompositionText') return;
+    this.finishComposition();
+    if (this.composing) return;
     this.syncSelection();
     const t = e.inputType;
     switch (t) {
@@ -1763,6 +1766,9 @@ export class Editor {
 
   private onCompositionStart() {
     if (!this.editable) return;
+    // Words typed back to back: take in the previous one before this composition begins, or its
+    // pending timer would end this composition half-way.
+    this.finishComposition();
     this.syncSelection();
     const sel = this._state.selection;
     if (sel?.type === 'text' && !isCollapsed(sel) && sel.anchor.block !== sel.focus.block) {
@@ -1775,11 +1781,21 @@ export class Editor {
   private onCompositionEnd() {
     // Safari fires compositionend before the last input event, Chrome after it. Reading the DOM
     // on the next task works for both: by then the browser has written the final text.
-    setTimeout(() => {
-      this.composing = false;
-      this.reconcile();
-      if (this.renderPending) this.render();
-    }, 0);
+    clearTimeout(this.compositionTimer);
+    this.compositionTimer = window.setTimeout(() => this.finishComposition(), 0);
+  }
+
+  /**
+   * Takes the composed text into the model. Also runs early when the next key arrives before the
+   * timer (Enter pressed right after choosing a word), so that key acts on the committed text.
+   */
+  private finishComposition() {
+    if (!this.compositionTimer) return;
+    clearTimeout(this.compositionTimer);
+    this.compositionTimer = 0;
+    this.composing = false;
+    this.reconcile();
+    if (this.renderPending) this.render();
   }
 
   /**
@@ -1841,6 +1857,7 @@ export class Editor {
 
   private onKeyDown(e: KeyboardEvent) {
     if (e.isComposing || e.keyCode === 229) return;
+    this.finishComposition();
     // selectionchange arrives asynchronously; a fast key press must see where the caret is now.
     this.syncSelection();
     for (const h of this.keyHandlers) {
