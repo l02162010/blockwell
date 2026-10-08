@@ -55,6 +55,24 @@ test('@ mention picker stores only the user id', async ({ page }) => {
   await expect(main(page).locator('.bw-mention').last()).toHaveText('@陳柏翰');
 });
 
+test('a menu opening under a resting pointer keeps the keyboard selection', async ({ page }) => {
+  await caretAtEnd(page);
+  await page.keyboard.type('請 @陳');
+  const members = page.locator('.bw-mention-menu .bw-member');
+  await expect(members).toHaveCount(3);
+  await expect(page.locator('.bw-mention-menu')).toHaveCSS('opacity', '1'); // placed
+  // What Firefox does when the menu appears under the cursor: a mouse event without movement.
+  const box = (await members.nth(1).boundingBox())!;
+  await page.mouse.move(box.x + 20, box.y + box.height / 2);
+  await expect(members.nth(0)).toHaveClass(/bw-current/);
+  // Moving the mouse over an item does select it.
+  await page.mouse.move(box.x + 40, box.y + box.height / 2, { steps: 4 });
+  await expect(members.nth(1)).toHaveClass(/bw-current/);
+  await page.keyboard.press('ArrowUp');
+  await page.keyboard.press('Enter');
+  expect((await last(page)).entities).toEqual([{ at: 2, type: 'mention', attrs: { userId: 'u_chen' } }]);
+});
+
 test('Backspace right after a Markdown shortcut turns it back into text', async ({ page }) => {
   await caretAtEnd(page);
   await page.keyboard.type('## ');

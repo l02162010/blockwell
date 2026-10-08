@@ -284,3 +284,17 @@ export const kbd = (keys: string): string =>
 
 /** Keeps toolbar buttons from taking focus away from the editor. */
 export const keepFocus = (e: MouseEvent) => e.preventDefault();
+
+/**
+ * Hover for menu items that only follows a pointer that actually moves. A menu that opens under
+ * a resting cursor gets mouse events too (Firefox fires them right away); without this, the item
+ * under the cursor would steal the keyboard selection and Enter would pick it.
+ */
+export function useHoverIntent() {
+  let last: string | null = null;
+  return (e: MouseEvent, select: () => void) => {
+    const at = `${e.clientX},${e.clientY}`;
+    if (last !== null && last !== at) select();
+    last = at;
+  };
+}

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
-import { keepFocus, useBlockwell, useFloating, useOutside } from '../composables.js';
+import { keepFocus, useBlockwell, useFloating, useHoverIntent, useOutside } from '../composables.js';
 
 export interface Member {
   id: string;
@@ -14,6 +14,7 @@ export interface Member {
 /** `@` picker. The host looks members up; the document stores only the chosen id (design 01). */
 const props = defineProps<{ query: string; search: (query: string) => Member[] | Promise<Member[]> }>();
 const ctx = useBlockwell();
+const hover = useHoverIntent();
 const m = ctx.messages;
 const ed = () => ctx.editor.value;
 const results = shallowRef<Member[]>([]);
@@ -85,7 +86,7 @@ onBeforeUnmount(() => {
         :class="{ 'bw-current': i === index }"
         :aria-selected="i === index"
         @mousedown="keepFocus"
-        @mouseenter="index = i"
+        @mousemove="hover($event, () => (index = i))"
         @click="choose(mem)"
       >
         <span class="bw-avatar" :class="mem.color ? [`bw-c-${mem.color}`, `bw-bg-${mem.color}`] : []">{{ mem.name.slice(0, 1) }}</span>

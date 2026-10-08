@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { Editor } from '@blockwell/core';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { keepFocus, useBlockwell, useFloating, useOutside } from '../composables.js';
+import { keepFocus, useBlockwell, useFloating, useHoverIntent, useOutside } from '../composables.js';
 import { slashItems, type SlashItem } from '../messages.js';
 import BwIcon from './BwIcon.vue';
 
@@ -11,6 +11,7 @@ import BwIcon from './BwIcon.vue';
  */
 const props = defineProps<{ mode: 'slash' | 'insert'; query?: string }>();
 const ctx = useBlockwell();
+const hover = useHoverIntent();
 const m = ctx.messages;
 const ed = () => ctx.editor.value;
 
@@ -141,7 +142,7 @@ onBeforeUnmount(() => {
         role="option"
         :aria-selected="flatIndex(it) === index"
         @mousedown="keepFocus"
-        @mouseenter="index = flatIndex(it)"
+        @mousemove="hover($event, () => (index = flatIndex(it)))"
         @click="choose(it)"
       >
         <span class="bw-slash-icon"><BwIcon :name="it.icon" :size="18" /></span>
