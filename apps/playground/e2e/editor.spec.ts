@@ -29,6 +29,8 @@ async function select(page: Page, text: string) {
         const s = getSelection()!;
         s.removeAllRanges();
         s.addRange(r);
+        // A late-loading image above can push the text out of view; the bubble hides then.
+        n.parentElement!.scrollIntoView({ block: 'center' });
         return;
       }
     }
@@ -73,7 +75,7 @@ test('bold with the keyboard and the floating toolbar', async ({ page }) => {
   await select(page, 'bold');
   await page.keyboard.press(`${mod}+b`);
   expect((await last(page)).marks).toEqual([{ type: 'bold', from: 8, to: 12 }]);
-  await expect(page.locator('.bw-bubble:visible')).toBeVisible();
+  await expect(page.locator('.bw-bubble:visible')).toHaveCSS('opacity', '1');
   await page.locator('.bw-bubble:visible [aria-label^="斜體"]').click();
   expect((await last(page)).marks).toContainEqual({ type: 'italic', from: 8, to: 12 });
 });
@@ -128,6 +130,8 @@ test('colors come from the palette', async ({ page }) => {
   await caretAtEnd(page);
   await page.keyboard.type('colorful');
   await select(page, 'color');
+  // Hidden bubbles stay in the layout at opacity 0; wait until it is placed.
+  await expect(page.locator('.bw-bubble:visible').first()).toHaveCSS('opacity', '1');
   await page.locator('.bw-bubble:visible .bw-tool-color').click();
   await page.locator('.bw-swatch-text[title="紅色 red"]').click();
   await page.locator('.bw-swatch-bg[title="黃色 yellow"]').click();
