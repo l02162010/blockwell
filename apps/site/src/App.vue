@@ -9,6 +9,7 @@ import { heroDoc, nastyHtml, server, usage } from './content';
 const REPO = 'https://github.com/l02162010/blockwell';
 const base = import.meta.env.BASE_URL;
 const PLAYGROUND = `${base}playground/`;
+const DOCS = `${base}docs/`;
 
 const theme = ref(document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light');
 watch(theme, (t) => {
@@ -74,7 +75,7 @@ const features = [
   ['accessibility_new', '無障礙', '工具列 roving tabindex、選單 aria-activedescendant、狀態變化由 live region 朗讀，⌘/ 列出所有快捷鍵。'],
   ['group', '協作介面', '在線成員、遠端游標、留言、版本差異與離線佇列都是元件，資料由你的後端提供。'],
   ['dark_mode', '深色模式與列印', '色盤 token 在淺色、深色、列印三種輸出各有一組經過對比檢查的色值。'],
-  ['translate', '四種後端，一份規格', 'TypeScript、Go、C#、Rust 驗證器共用同一份 conformance 測試，伺服器端也能拒絕不合法的文件。'],
+  ['translate', '規格與語言無關', 'schema 是一份 JSON 規格，附 conformance 測試。TypeScript 驗證器已完成，可在 Node.js 伺服器上拒絕不合法的文件；Go、C#、Rust 仍在規劃中。'],
 ] as const;
 
 </script>
@@ -91,6 +92,7 @@ const features = [
         <a href="#security">安全模型</a>
         <a href="#features">功能</a>
         <a href="#start">開始使用</a>
+        <a :href="DOCS">文件</a>
         <a :href="PLAYGROUND">Playground</a>
       </div>
       <div class="nav-actions">
@@ -112,6 +114,7 @@ const features = [
         <a href="#security">安全模型</a>
         <a href="#features">功能</a>
         <a href="#start">開始使用</a>
+        <a :href="DOCS">文件</a>
         <a :href="PLAYGROUND">Playground</a>
         <a :href="REPO" target="_blank" rel="noopener">GitHub</a>
       </div>
@@ -232,7 +235,8 @@ const features = [
         </figure>
       </div>
       <div class="cta">
-        <a class="btn btn-primary" :href="REPO" target="_blank" rel="noopener">在 GitHub 上查看</a>
+        <a class="btn btn-primary" :href="`${DOCS}guide/getting-started`">閱讀文件</a>
+        <a class="btn" :href="REPO" target="_blank" rel="noopener">在 GitHub 上查看</a>
         <a class="btn" :href="`${REPO}/blob/main/spec/SPEC.md`" target="_blank" rel="noopener">閱讀規格</a>
       </div>
     </section>

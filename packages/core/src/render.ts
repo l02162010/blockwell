@@ -4,7 +4,7 @@ import { tokenize } from './highlight.js';
 import { OBJ } from './marks.js';
 import type { Block, Mark } from './types.js';
 
-export interface RenderOptions {
+interface RenderOptions {
   editable: boolean;
   /** Display text for a mention entity. */
   mentionLabel?: (userId: string) => string;
@@ -60,7 +60,7 @@ function wrap(child: Node, mark: Mark, editable: boolean): Node {
 }
 
 /** Fills a text container with the block's runs. Text only ever becomes text nodes. */
-export function renderText(container: HTMLElement, block: Block, o: RenderOptions) {
+function renderText(container: HTMLElement, block: Block, o: RenderOptions) {
   container.replaceChildren();
   const text = block.text ?? '';
   const marks = block.marks ?? [];

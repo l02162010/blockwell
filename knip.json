@@ -3,7 +3,8 @@
   "workspaces": {
     "packages/schema": {
       "entry": [
-        "src/index.ts"
+        "src/index.ts",
+        "test/**/*.ts"
       ],
       "project": [
         "src/**/*.ts"
@@ -11,7 +12,8 @@
     },
     "packages/core": {
       "entry": [
-        "src/index.ts"
+        "src/index.ts",
+        "test/**/*.ts"
       ],
       "project": [
         "src/**/*.ts"
@@ -39,6 +41,11 @@
       "project": [
         "src/**/*.{ts,vue}"
       ]
+    },
+    "apps/docs": {
+      "project": [
+        ".vitepress/**/*.{ts,vue}"
+      ]
     }
   },
   "ignoreWorkspaces": [
@@ -47,8 +54,6 @@
     "dotnet"
   ],
   "ignoreDependencies": [
-    "jsdom",
-    "@types/jsdom",
     "@arethetypeswrong/cli"
   ]
 }

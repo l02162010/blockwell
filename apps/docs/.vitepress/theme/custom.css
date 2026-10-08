@@ -1,0 +1,42 @@
+/* VitePress colours follow the editor's own accent, so the docs and the demos match. */
+:root {
+  --vp-c-brand-1: oklch(0.47 0.12 255);
+  --vp-c-brand-2: oklch(0.52 0.12 255);
+  --vp-c-brand-3: oklch(0.52 0.12 255);
+  --vp-c-brand-soft: oklch(0.94 0.035 255);
+}
+.dark {
+  --vp-c-brand-1: oklch(0.78 0.1 255);
+  --vp-c-brand-2: oklch(0.7 0.12 255);
+  --vp-c-brand-3: oklch(0.62 0.12 255);
+  --vp-c-brand-soft: oklch(0.35 0.06 255);
+}
+/* The editor's theme reads data-theme / .dark; VitePress sets .dark on <html>. */
+.demo {
+  margin: 16px 0 24px;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.demo .bw-root.bw-page {
+  height: 260px;
+}
+.demo .bw-page .bw-doc {
+  padding: 24px 28px 48px;
+}
+.demo-json {
+  margin: 0;
+  max-height: 220px;
+  overflow: auto;
+  border-top: 1px solid var(--vp-c-divider);
+  background: var(--vp-c-bg-soft);
+  font-size: 12px;
+  line-height: 1.6;
+  padding: 12px 16px;
+}
+.api-table code {
+  white-space: nowrap;
+}
+.api-table td:last-child {
+  min-width: 260px;
+}

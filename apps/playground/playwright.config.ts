@@ -11,6 +11,7 @@ const executablePath = process.env.PW_CHROMIUM_PATH;
 const wanted = new Set((process.env.PW_BROWSERS ?? 'chromium,firefox,webkit').split(','));
 const PLAYGROUND = 'http://localhost:5174';
 const SITE = 'http://localhost:5176';
+const DOCS = 'http://localhost:5177';
 
 const engines = [
   { name: 'chromium', device: devices['Desktop Chrome'] },
@@ -23,8 +24,9 @@ const projects: Project[] = [];
 for (const { name, device } of engines) {
   if (!wanted.has(name)) continue;
   projects.push(
-    { name: `playground-${name}`, testDir: 'e2e', testIgnore: ['site/**', 'mobile/**'], use: { ...device, ...launch(name), baseURL: PLAYGROUND } },
+    { name: `playground-${name}`, testDir: 'e2e', testIgnore: ['site/**', 'docs/**', 'mobile/**'], use: { ...device, ...launch(name), baseURL: PLAYGROUND } },
     { name: `site-${name}`, testDir: 'e2e/site', use: { ...device, ...launch(name), baseURL: SITE } },
+    { name: `docs-${name}`, testDir: 'e2e/docs', use: { ...device, ...launch(name), baseURL: DOCS } },
   );
 }
 if (wanted.has('chromium')) projects.push({ name: 'android', testDir: 'e2e/mobile', use: { ...devices['Pixel 7'], ...launch('chromium'), baseURL: PLAYGROUND } });
@@ -39,5 +41,6 @@ export default defineConfig({
   webServer: [
     { command: 'pnpm exec vite --port 5174 --strictPort', url: PLAYGROUND, reuseExistingServer: !process.env.CI },
     { command: 'pnpm exec vite --port 5176 --strictPort', cwd: '../site', url: SITE, reuseExistingServer: !process.env.CI },
+    { command: 'pnpm build && pnpm preview --port 5177', cwd: '../docs', url: DOCS, reuseExistingServer: !process.env.CI, timeout: 120_000 },
   ],
 });

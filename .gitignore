@@ -19,3 +19,4 @@ playwright-report/
 site-dist/
 apps/playground/.probe/
 api-report.json
+apps/docs/.vitepress/cache/

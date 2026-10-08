@@ -431,7 +431,7 @@ export function parseHtml(html: string, parser: DOMParser = new DOMParser()): Pa
 }
 
 /** Blocks per kind, for paste and migration summaries. */
-export function countBlocks(blocks: Block[]): Record<string, number> {
+function countBlocks(blocks: Block[]): Record<string, number> {
   const counts: Record<string, number> = {};
   const add = (k: string) => (counts[k] = (counts[k] ?? 0) + 1);
   const walk = (list: Block[]) => {

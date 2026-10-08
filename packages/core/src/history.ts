@@ -9,7 +9,7 @@ interface Entry {
 }
 
 /** Typing within this many milliseconds of the previous edit joins the same undo step. */
-export const MERGE_WINDOW = 500;
+const MERGE_WINDOW = 500;
 
 export class History {
   private done: Entry[] = [];

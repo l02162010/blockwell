@@ -135,7 +135,7 @@ function clearContainer(tr: Tr, id: string) {
 }
 
 /** Appends `source`'s content to `target` and removes `source`. */
-export function mergeInto(tr: Tr, target: string, source: string) {
+function mergeInto(tr: Tr, target: string, source: string) {
   const t = tr.block(target), s = tr.block(source);
   const c = adaptContent(contentOf(s), t.type);
   tr.insertText({ block: target, offset: textLength(t) }, c.text, c.marks, c.entities);

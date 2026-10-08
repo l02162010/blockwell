@@ -63,7 +63,7 @@ export function applyOp(doc: Doc, op: Op): Doc {
   }
 }
 
-export function invertOp(op: Op): Op {
+function invertOp(op: Op): Op {
   switch (op.type) {
     case 'insertText':
       return { type: 'deleteText', block: op.block, from: op.offset, text: op.text, marks: op.marks, entities: op.entities };

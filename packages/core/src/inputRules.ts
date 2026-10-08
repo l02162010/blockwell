@@ -33,7 +33,7 @@ const fence: Rule['run'] = (tr, o, m) => {
 const FENCE = /^```([\w#+-]*)$/;
 
 /** Markdown-style shortcuts typed at the start of a paragraph (engine guide §4). */
-export const INPUT_RULES: Rule[] = [
+const INPUT_RULES: Rule[] = [
   { match: /^# $/, run: kind('heading1') },
   { match: /^## $/, run: kind('heading2') },
   { match: /^### $/, run: kind('heading3') },
