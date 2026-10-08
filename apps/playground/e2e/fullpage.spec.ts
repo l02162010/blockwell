@@ -150,7 +150,8 @@ test('each version shows its own diff and can be restored', async ({ page }) => 
   await expect(page.locator('.bw-diff')).toContainText('我們以 JSON 為主');
   await page.getByRole('button', { name: /還原此版本/ }).click();
   await expect(page.locator('.bw-history')).toHaveCount(0);
-  expect((await json(page)).map(textOf)).toContain('我們以 JSON 為主，畫面只是它的投影。');
+  // The playground restores on the next frame, after the panel has closed.
+  await expect.poll(async () => (await json(page)).map(textOf)).toContain('我們以 JSON 為主，畫面只是它的投影。');
 });
 
 test('⌘F again returns to the search field; closing selects the match', async ({ page }) => {

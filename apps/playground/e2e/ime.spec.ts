@@ -133,9 +133,9 @@ test('composing in a table cell and a list item', async ({ page }) => {
   await compose(cdp, ['ㄕ', 'ㄕㄡˇ'], '手');
   await caretAfter(page, '協作（Yjs）');
   await compose(cdp, ['ㄓ', 'ㄓㄨˇ'], '主');
-  const bs = await json(page);
-  expect(find(bs, (b) => b.text === 'iOS手')).toBeTruthy();
-  expect(find(bs, (b) => b.text === '協作（Yjs）主')).toBeTruthy();
+  // The composed text reaches the model one tick after compositionend.
+  await expect.poll(async () => !!find(await json(page), (b) => b.text === 'iOS手')).toBe(true);
+  await expect.poll(async () => !!find(await json(page), (b) => b.text === '協作（Yjs）主')).toBe(true);
 });
 
 test('a composition that is cancelled leaves the text as it was', async ({ page }) => {

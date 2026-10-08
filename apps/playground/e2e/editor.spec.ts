@@ -144,7 +144,10 @@ test('paste strips styles and scripts and says so', async ({ page }) => {
     const dt = new DataTransfer();
     dt.setData('text/html', '<h2 style="color:red">Pasted</h2><p class="x" onclick="alert(1)"><b>bold</b> <a href="javascript:alert(1)">bad</a> <a href="https://ok.example/">good</a></p><script>alert(1)</script><img src=x onerror=alert(1)>');
     dt.setData('text/plain', 'Pasted\nbold bad good');
-    document.querySelector('.bw-page .bw-editor')!.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
+    const event = new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true });
+    // Firefox drops clipboardData from script-made paste events; real pastes carry it.
+    if (event.clipboardData?.getData('text/html')) document.querySelector('.bw-page .bw-editor')!.dispatchEvent(event);
+    else (window as unknown as { __editor: { pasteData(d: DataTransfer): void } }).__editor.pasteData(dt);
   });
   const bs = await blocks(page);
   const pasted = bs.slice(-2);
@@ -165,7 +168,8 @@ test('paste strips styles and scripts and says so', async ({ page }) => {
   ]);
 });
 
-test('IME composition inserts the committed text once', async ({ page }) => {
+test('IME composition inserts the committed text once', async ({ page, browserName }) => {
+  test.skip(browserName !== 'chromium', 'IME composition is driven through the Chromium DevTools protocol');
   await caretAtEnd(page);
   await page.keyboard.type('注音：');
   const cdp = await page.context().newCDPSession(page);
@@ -175,7 +179,7 @@ test('IME composition inserts the committed text once', async ({ page }) => {
   await cdp.send('Input.insertText', { text: '中' });
   await page.waitForTimeout(50);
   await page.keyboard.type('文');
-  expect((await last(page)).text).toBe('注音：中文');
+  await expect.poll(async () => (await last(page)).text).toBe('注音：中文');
 });
 
 test('to-do checkbox toggles', async ({ page }) => {
