@@ -34,7 +34,7 @@ kbd {
   text-align: center;
   font-size: 12px;
 }
-:focus-visible {
+:where(a, button, input, textarea, select, summary):focus-visible {
   outline: 2px solid var(--bw-accent-ring);
   outline-offset: 2px;
 }
@@ -56,7 +56,7 @@ kbd {
   align-items: center;
   gap: 24px;
   padding: 12px max(var(--gutter), calc((100vw - var(--max)) / 2));
-  background: color-mix(in oklch, var(--bw-page) 82%, transparent);
+  background: color-mix(in oklch, var(--bw-page) 94%, transparent);
   backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--bw-line-soft);
 }
@@ -215,7 +215,7 @@ kbd {
 }
 .demo-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr);
   border: 1px solid var(--bw-line);
   border-radius: 16px;
   overflow: hidden;
@@ -585,4 +585,76 @@ kbd {
   gap: 12px;
   border-top: 1px solid var(--bw-line);
   font-size: 14px;
+}
+
+/* The live demo has a fixed height: the toolbar stays in view and the editor scrolls inside. */
+.demo-grid {
+  height: min(620px, calc(100vh - 140px));
+  /* One row that may shrink: each pane scrolls inside the box instead of overflowing it. */
+  grid-template-rows: minmax(0, 1fr);
+}
+.demo-editor {
+  min-height: 0;
+  overflow: hidden;
+}
+.demo-editor .bw-root {
+  height: 100%;
+}
+.demo-json .json {
+  overflow: auto;
+}
+.demo-json {
+  min-height: 0;
+}
+.demo-json .json {
+  max-height: none;
+  min-height: 0;
+}
+@media (max-width: 900px) {
+  .demo-grid {
+    height: min(560px, calc(100vh - 160px));
+  }
+}
+
+/* Phone navigation */
+.nav-menu-btn {
+  display: none;
+}
+.nav-sheet {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 8px var(--gutter) 16px;
+  background: var(--bw-page);
+  border-bottom: 1px solid var(--bw-line);
+  box-shadow: 0 16px 32px -16px rgba(0, 0, 0, 0.2);
+}
+.nav-sheet a {
+  padding: 12px 4px;
+  border-bottom: 1px solid var(--bw-line-soft);
+  text-decoration: none;
+  font-size: 16px;
+}
+@media (max-width: 760px) {
+  .nav-menu-btn {
+    display: grid;
+  }
+  .nav-github {
+    display: none;
+  }
+}
+@media (min-width: 761px) {
+  .nav-sheet {
+    display: none;
+  }
+}
+
+/* All eleven colours on one row where there is room. */
+@media (min-width: 900px) {
+  .swatches {
+    grid-template-columns: repeat(11, minmax(0, 1fr));
+  }
 }

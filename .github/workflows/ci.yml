@@ -23,6 +23,56 @@ jobs:
       - run: pnpm test
       - run: pnpm build
 
+  quality:
+    # The public API, the packages as published, and dead code.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Every public prop, event and method is documented and tested
+        run: pnpm api:check
+      - name: No unused files, exports or dependencies
+        run: pnpm lint:dead
+      - run: pnpm -r --filter "./packages/*" build
+      - name: Package metadata (publint)
+        run: pnpm lint:package
+      - name: Install the packed packages into a fresh Vite app and build it
+        run: pnpm smoke
+
+  e2e:
+    # Every demo on the website and the playground, in each browser engine.
+    name: e2e (${{ matrix.engine }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        engine: [chromium, firefox, webkit]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps ${{ matrix.engine }}
+        working-directory: apps/playground
+      - run: pnpm exec playwright test
+        working-directory: apps/playground
+        env:
+          CI: '1'
+          PW_BROWSERS: ${{ matrix.engine }}
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-${{ matrix.engine }}
+          path: apps/playground/test-results
+
   go:
     runs-on: ubuntu-latest
     defaults:

@@ -29,6 +29,8 @@ async function select(page: Page, text: string) {
         const s = getSelection()!;
         s.removeAllRanges();
         s.addRange(r);
+        // A late-loading image above can push the text out of view; the bubble hides then.
+        n.parentElement!.scrollIntoView({ block: 'center' });
         return;
       }
     }
@@ -73,7 +75,7 @@ test('bold with the keyboard and the floating toolbar', async ({ page }) => {
   await select(page, 'bold');
   await page.keyboard.press(`${mod}+b`);
   expect((await last(page)).marks).toEqual([{ type: 'bold', from: 8, to: 12 }]);
-  await expect(page.locator('.bw-bubble:visible')).toBeVisible();
+  await expect(page.locator('.bw-bubble:visible')).toHaveCSS('opacity', '1');
   await page.locator('.bw-bubble:visible [aria-label^="斜體"]').click();
   expect((await last(page)).marks).toContainEqual({ type: 'italic', from: 8, to: 12 });
 });
@@ -128,6 +130,8 @@ test('colors come from the palette', async ({ page }) => {
   await caretAtEnd(page);
   await page.keyboard.type('colorful');
   await select(page, 'color');
+  // Hidden bubbles stay in the layout at opacity 0; wait until it is placed.
+  await expect(page.locator('.bw-bubble:visible').first()).toHaveCSS('opacity', '1');
   await page.locator('.bw-bubble:visible .bw-tool-color').click();
   await page.locator('.bw-swatch-text[title="紅色 red"]').click();
   await page.locator('.bw-swatch-bg[title="黃色 yellow"]').click();
@@ -144,7 +148,10 @@ test('paste strips styles and scripts and says so', async ({ page }) => {
     const dt = new DataTransfer();
     dt.setData('text/html', '<h2 style="color:red">Pasted</h2><p class="x" onclick="alert(1)"><b>bold</b> <a href="javascript:alert(1)">bad</a> <a href="https://ok.example/">good</a></p><script>alert(1)</script><img src=x onerror=alert(1)>');
     dt.setData('text/plain', 'Pasted\nbold bad good');
-    document.querySelector('.bw-page .bw-editor')!.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
+    const event = new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true });
+    // Firefox drops clipboardData from script-made paste events; real pastes carry it.
+    if (event.clipboardData?.getData('text/html')) document.querySelector('.bw-page .bw-editor')!.dispatchEvent(event);
+    else (window as unknown as { __editor: { pasteData(d: DataTransfer): void } }).__editor.pasteData(dt);
   });
   const bs = await blocks(page);
   const pasted = bs.slice(-2);
@@ -165,7 +172,8 @@ test('paste strips styles and scripts and says so', async ({ page }) => {
   ]);
 });
 
-test('IME composition inserts the committed text once', async ({ page }) => {
+test('IME composition inserts the committed text once', async ({ page, browserName }) => {
+  test.skip(browserName !== 'chromium', 'IME composition is driven through the Chromium DevTools protocol');
   await caretAtEnd(page);
   await page.keyboard.type('注音：');
   const cdp = await page.context().newCDPSession(page);
@@ -175,7 +183,7 @@ test('IME composition inserts the committed text once', async ({ page }) => {
   await cdp.send('Input.insertText', { text: '中' });
   await page.waitForTimeout(50);
   await page.keyboard.type('文');
-  expect((await last(page)).text).toBe('注音：中文');
+  await expect.poll(async () => (await last(page)).text).toBe('注音：中文');
 });
 
 test('to-do checkbox toggles', async ({ page }) => {

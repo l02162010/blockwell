@@ -1,22 +1,20 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
-import { useBlockwell, visibleRect } from '../composables.js';
+import { computed } from 'vue';
+import { useBlockwell, useLayoutTick, visibleRect } from '../composables.js';
 import BwIcon from './BwIcon.vue';
 
 /** Comment counts at the right edge of commented blocks. */
 const props = defineProps<{ counts: Record<string, number> }>();
 const emit = defineEmits<{ open: [block: string] }>();
 const ctx = useBlockwell();
-const tick = ref(0);
-const bump = () => tick.value++;
-onMounted(() => {
-  window.addEventListener('scroll', bump, true);
-  window.addEventListener('resize', bump);
-});
-onBeforeUnmount(() => {
-  window.removeEventListener('scroll', bump, true);
-  window.removeEventListener('resize', bump);
-});
+const tick = useLayoutTick(() => ctx.editor.value);
+/** In the right margin when there is room; otherwise just above the block's top-right corner. */
+const place = (r: DOMRect) => {
+  const clip = visibleRect(ctx.editor.value);
+  const right = clip?.right ?? window.innerWidth;
+  if (r.right + 44 <= right) return { top: `${r.top + 4}px`, left: `${r.right + 8}px` };
+  return { top: `${Math.max(r.top - 22, (clip?.top ?? 0) + 2)}px`, left: `${right - 44}px` };
+};
 const badges = computed(() => {
   void tick.value;
   void ctx.version.value;
@@ -33,7 +31,7 @@ const badges = computed(() => {
     :key="b.id"
     type="button"
     class="bw-comment-badge"
-    :style="{ top: `${b.r!.top + 4}px`, left: `${b.r!.right - 40}px` }"
+    :style="place(b.r!)"
     :aria-label="`${b.n} comments`"
     @mousedown.prevent
     @click="emit('open', b.id)"

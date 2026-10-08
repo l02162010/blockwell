@@ -5,11 +5,13 @@ import { shallowRef } from 'vue';
 import { pasteSamples, textDoc } from '../sample';
 import SectionHead from './SectionHead.vue';
 
-const doc = textDoc('');
+const doc = shallowRef(textDoc(''));
 const editor = shallowRef<Editor | null>(null);
 const paste = (kind: keyof typeof pasteSamples) => {
   const e = editor.value;
   if (!e) return;
+  // Each button shows one source on its own: start from an empty field.
+  e.setDoc(textDoc(''));
   const last = e.getJSON().blocks.at(-1)!;
   e.focus();
   e.setSelection({ type: 'text', anchor: { block: last.id, offset: last.text?.length ?? 0 }, focus: { block: last.id, offset: last.text?.length ?? 0 } });
@@ -31,7 +33,7 @@ const paste = (kind: keyof typeof pasteSamples) => {
         <button type="button" @click="paste('word')">從 Word 貼上</button>
         <button type="button" @click="paste('markdown')">貼上 Markdown</button>
       </div>
-      <BlockwellEditor variant="field" :model-value="doc" placeholder="點上方按鈕模擬貼上，或直接貼上 · Paste here" @ready="editor = $event" />
+      <BlockwellEditor v-model="doc" class="paste-field" variant="field" placeholder="點上方按鈕模擬貼上，或直接貼上 · Paste here" @ready="editor = $event" />
     </div>
   </section>
 </template>

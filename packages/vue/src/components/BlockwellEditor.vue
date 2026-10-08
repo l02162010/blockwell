@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { Editor, type Doc, type EditorOptions, type HighlightRange } from '@blockwell/core';
 import { computed, markRaw, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
-import { provideBlockwell } from '../composables.js';
+import { kbd, provideBlockwell } from '../composables.js';
 import { defaultMessages, type Messages } from '../messages.js';
 import AlignMenu from './AlignMenu.vue';
 import Announcer from './Announcer.vue';
 import BlockHandles from './BlockHandles.vue';
+import BlockActionsMenu from './BlockActionsMenu.vue';
+import BwIcon from './BwIcon.vue';
 import BlockKindMenu from './BlockKindMenu.vue';
 import BubbleMenu from './BubbleMenu.vue';
 import CodeLanguageMenu from './CodeLanguageMenu.vue';
@@ -33,21 +35,29 @@ import UploadList from './UploadList.vue';
 
 const props = withDefaults(
   defineProps<{
+    /** The document (`v-model`). A new value from outside replaces the content; invalid documents are refused. */
     modelValue?: Doc | null;
     /** `page`: full document. `field`: a form field replacing a rich textarea. `comment`: inline styles only. */
     variant?: 'page' | 'field' | 'comment';
+    /** `false` makes the document read-only: no toolbars or handles, still selectable, ⌘F and ⌘/ still work. */
     editable?: boolean;
+    /** Shown while the whole document is empty. */
     placeholder?: string;
+    /** Block types this editor may create, e.g. `['paragraph', 'listItem']` (default: all; `comment`: paragraphs). Read once. */
     allowedBlocks?: readonly string[];
+    /** Uploads a pasted, dropped or picked image and resolves to its `https:` URL. Without it there is no image upload. */
     uploadImage?: EditorOptions['uploadImage'];
+    /** Display name for a mention's user id (documents store only the id). */
     mentionLabel?: EditorOptions['mentionLabel'];
     /** Enables `@` mentions: looks up members for the picker. Documents store only the id. */
     mentionSearch?: (query: string) => Member[] | Promise<Member[]>;
+    /** Replaces any of the UI strings (see `defaultMessages`). Read once. */
     messages?: Partial<Messages>;
     /** Character limit shown by the field variant's counter. */
     maxLength?: number;
     /** Markdown shortcut hint shown by the field variant. */
     hint?: string;
+    /** Other people's carets to draw, from your collaboration layer. */
     cursors?: RemoteCursor[];
     /** Shows a comment button in the selection bar. */
     comments?: boolean;
@@ -67,7 +77,7 @@ const props = withDefaults(
     onboarding?: boolean;
     /** Shows the page variant's top toolbar (the floating bar and slash menu stay). */
     toolbar?: boolean;
-    /** Below this width the page toolbar moves above the keyboard. */
+    /** Below this viewport width (px) the layout switches to the phone layout: a bar above the keyboard, sheets instead of popovers. Read on mount. */
     mobileBreakpoint?: number;
     /** `mobile` forces the narrow layout with the toolbar inside the editor (for previews). */
     layout?: 'auto' | 'mobile';
@@ -88,13 +98,20 @@ const props = withDefaults(
   },
 );
 const emit = defineEmits<{
+  /** The document changed (debounced by `debounce` ms; flushed on blur). */
   'update:modelValue': [doc: Doc];
+  /** The editor is mounted; use the `Editor` for anything the props do not cover. */
   ready: [editor: Editor];
+  /** `comment` variant: ⌘↵ or the send button with a non-empty message. */
   submit: [doc: Doc];
+  /** The comment button (selection bar or phone bar) was pressed; read the selection from the editor. */
   comment: [];
+  /** A comment badge was clicked; the payload is its top-level block id. */
   'comment-open': [block: string];
-  mention: [];
+  /** The retry button in the save-error banner was pressed. */
   retry: [];
+  /** The first-run tips were hidden; set `onboarding` to false from now on to remember it. */
+  'onboarding-dismiss': [];
 }>();
 
 const messages: Messages = { ...defaultMessages, ...props.messages };
@@ -105,7 +122,8 @@ const editor = shallowRef(
       ...(props.modelValue ? { doc: props.modelValue } : {}),
       editable: props.editable,
       ...(allowed ? { allowedBlocks: allowed } : {}),
-      placeholder: props.placeholder ?? (props.variant === 'page' ? messages.placeholder : ''),
+      // A custom placeholder is for the empty document; empty lines keep the "type /" hint.
+      placeholder: props.variant === 'page' ? messages.placeholder : '',
       emptyPlaceholder: props.placeholder ?? (props.variant === 'comment' ? messages.reply : props.variant === 'page' ? messages.emptyHint : messages.placeholder),
       placeholders: messages.placeholders,
       copiedLabel: messages.copied,
@@ -154,6 +172,7 @@ const slash = shallowRef(ed().slash);
 const mention = shallowRef(ed().mention);
 const searchOpen = ref(false);
 const shortcutsOpen = ref(false);
+const searchSeed = ref({ text: '', n: 0 });
 const offs = [
   ed().on('change', () => {
     clearTimeout(timer);
@@ -171,7 +190,11 @@ const offs = [
     else if (a.type === 'code-language') {
       ctx.open('codeLanguage', () => ed().blockElement(a.block)?.querySelector('.bw-code-lang')?.getBoundingClientRect() ?? null, { block: a.block });
     } else if (a.type === 'shortcuts') shortcutsOpen.value = true;
-    else if (a.type === 'search' && props.variant === 'page') searchOpen.value = true;
+    else if (a.type === 'search' && props.variant === 'page') {
+      // Opening again (search already open) goes back to the field; a selection seeds the query.
+      searchSeed.value = { text: ed().selectedText().slice(0, 100), n: searchSeed.value.n + 1 };
+      searchOpen.value = true;
+    }
     else if (a.type === 'escape') ctx.close();
   }),
   ed().on('refuse', (e) => {
@@ -195,6 +218,9 @@ if (props.variant === 'comment') {
 }
 const submit = () => {
   if (timer) flush();
+  // An empty message is not sent (read the document now, not the per-frame snapshot).
+  const blocks = ed().getJSON().blocks;
+  if (blocks.length === 1 && blocks[0]!.type === 'paragraph' && !blocks[0]!.text) return;
   emit('submit', ed().getJSON());
 };
 
@@ -215,6 +241,8 @@ const narrow = ref(false);
 const keyboardOffset = ref(0);
 let mq: MediaQueryList | null = null;
 const onMq = () => (narrow.value = props.layout === 'mobile' || !!mq?.matches);
+watch(narrow, (v) => (ctx.narrow.value = v), { immediate: true });
+watch(focused, (v) => (ctx.focused.value = v));
 const onViewport = () => {
   const vv = window.visualViewport;
   keyboardOffset.value = vv ? Math.max(0, window.innerHeight - vv.height - vv.offsetTop) : 0;
@@ -251,8 +279,34 @@ const stats = computed(() => {
 const commentOpen = computed(() => focused.value || count.value > 0 || ctx.ui.popover !== null);
 const isPage = computed(() => props.variant === 'page');
 const showPageToolbar = computed(() => isPage.value && props.toolbar && props.editable && !narrow.value && !props.diffBase);
-const showMobileToolbar = computed(() => isPage.value && props.editable && narrow.value && (focused.value || props.layout === 'mobile'));
+// Like a phone's keyboard bar: only while editing, so it never looks active when it is not.
+const showMobileToolbar = computed(() => isPage.value && props.editable && narrow.value && focused.value);
 const fmt = (n: number) => n.toLocaleString('en-US');
+
+/** A click in the empty space below the document continues it, like a word processor. */
+function onBlankMouseDown(e: MouseEvent) {
+  const t = e.target as Element;
+  if (e.button !== 0 || !props.editable || props.loading || props.diffBase) return;
+  if (t.closest('.bw-editor, button, a, input, textarea, select, [role], [contenteditable]')) return;
+  const ed = editor.value;
+  const last = ed.getJSON().blocks.at(-1);
+  const lastEl = last && ed.blockElement(last.id);
+  if (!lastEl) return;
+  e.preventDefault();
+  if (e.clientY > lastEl.getBoundingClientRect().bottom) return ed.focusEnd();
+  // Beside the text column: put the caret on the nearest line, as if the click were inside.
+  const dom = ed.dom;
+  const r = dom?.getBoundingClientRect();
+  const doc = dom?.ownerDocument as (Document & { caretRangeFromPoint?(x: number, y: number): Range | null }) | undefined;
+  if (!dom || !r || !doc?.caretRangeFromPoint) return;
+  const x = Math.min(Math.max(e.clientX, r.left + 1), r.right - 1);
+  const range = doc.caretRangeFromPoint(x, e.clientY);
+  if (!range || !dom.contains(range.startContainer)) return;
+  dom.focus({ preventScroll: true });
+  const sel = doc.getSelection();
+  sel?.removeAllRanges();
+  sel?.addRange(range);
+}
 
 defineExpose({ editor, submit });
 </script>
@@ -266,19 +320,23 @@ defineExpose({ editor, submit });
     ]"
   >
     <Toolbar v-if="showPageToolbar" variant="page" />
+    <!-- Comparing versions: a bar where the toolbar was, so the page does not jump. -->
+    <div v-else-if="isPage && toolbar && diffBase && !narrow" class="bw-toolbar bw-toolbar-page bw-diff-bar">
+      <BwIcon name="history" :size="18" />{{ messages.history.viewing }}
+    </div>
     <Toolbar v-if="variant === 'field' && editable" variant="field" />
     <StatusBanner v-if="saveError" kind="error" :path="saveError.path" @goto="gotoError" @retry="emit('retry')" />
     <StatusBanner v-else-if="offline" kind="offline" :pending="offline.pending" />
-    <SearchBar v-if="searchOpen" @close="searchOpen = false" />
+    <SearchBar v-if="searchOpen" :seed="searchSeed" @close="searchOpen = false" />
 
     <div class="bw-body">
-      <div class="bw-scroll">
+      <div class="bw-scroll" @mousedown="onBlankMouseDown">
         <div class="bw-doc">
           <slot name="before" />
           <Skeleton v-if="loading" />
           <DiffView v-else-if="diffBase" :base="diffBase" :current="editor.getJSON()" :mention-label="mentionLabel" />
           <EditorContent v-show="!loading && !diffBase" :editor="editor" class="bw-content" />
-          <EmptyState v-if="isPage && editable && onboarding && isEmpty && !loading && !diffBase" />
+          <EmptyState v-if="isPage && editable && onboarding && isEmpty && !loading && !diffBase" @dismiss="emit('onboarding-dismiss')" />
           <slot name="after" />
         </div>
       </div>
@@ -294,10 +352,10 @@ defineExpose({ editor, submit });
       <span class="bw-mono" :class="{ 'bw-over': maxLength && count > maxLength }">{{ fmt(count) }}<template v-if="maxLength"> / {{ fmt(maxLength) }}</template></span>
     </div>
 
-    <Toolbar v-if="variant === 'comment' && editable && commentOpen" variant="comment" @mention="emit('mention')">
+    <Toolbar v-if="variant === 'comment' && editable && commentOpen" variant="comment">
       <template #end>
-        <span class="bw-kbd-hint">⌘↵</span>
-        <button type="button" class="bw-btn bw-btn-dark" @mousedown.prevent @click="submit">{{ messages.send }}</button>
+        <span class="bw-kbd-hint">{{ kbd('⌘↵') }}</span>
+        <button type="button" class="bw-btn bw-btn-dark" :disabled="isEmpty" @mousedown.prevent @click="submit">{{ messages.send }}</button>
       </template>
     </Toolbar>
 
@@ -307,7 +365,7 @@ defineExpose({ editor, submit });
       :class="{ 'bw-mobile-inline': layout === 'mobile' }"
       :style="layout === 'mobile' ? undefined : { bottom: `${keyboardOffset}px` }"
     >
-      <Toolbar variant="mobile" />
+      <Toolbar variant="mobile" :comments="comments" @comment="emit('comment')" />
     </div>
 
     <!-- Floating UI -->
@@ -316,7 +374,7 @@ defineExpose({ editor, submit });
     <TableControls v-if="editable && !narrow" />
     <BlockHandles v-if="isPage && editable && !narrow" />
     <template v-if="narrow">
-      <SlashSheet v-if="slash" mode="slash" />
+      <SlashSheet v-if="slash" mode="slash" :query="slash.query" />
       <SlashSheet v-if="ctx.ui.popover === 'insert'" mode="insert" />
     </template>
     <template v-else>
@@ -325,6 +383,7 @@ defineExpose({ editor, submit });
     </template>
     <MentionMenu v-if="mention && mentionSearch" :query="mention.query" :search="mentionSearch" />
     <BlockKindMenu v-if="ctx.ui.popover === 'block'" />
+    <BlockActionsMenu v-if="ctx.ui.popover === 'blockActions'" :key="ctx.ui.block ?? ''" />
     <AlignMenu v-if="ctx.ui.popover === 'align'" />
     <ColorPalette v-if="ctx.ui.popover === 'color'" />
     <LinkPopover v-if="ctx.ui.popover === 'link'" />

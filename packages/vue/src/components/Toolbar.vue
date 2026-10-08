@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { getBlock, type BlockKind } from '@blockwell/core';
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
-import { keepFocus, useBlockwell, type PopoverKind } from '../composables.js';
+import { isMac, keepFocus, useBlockwell, type PopoverKind } from '../composables.js';
 import BlockKindButton from './BlockKindButton.vue';
 import BwIcon from './BwIcon.vue';
 import ColorButton from './ColorButton.vue';
@@ -12,8 +12,8 @@ import ToolButton from './ToolButton.vue';
  * `comment`: inline marks only. `mobile`: one row of 44px buttons above the keyboard, which
  * turns into a format row while text is selected and a table bar inside tables.
  */
-const props = defineProps<{ variant: 'page' | 'field' | 'comment' | 'mobile' }>();
-const emit = defineEmits<{ mention: [] }>();
+const props = defineProps<{ variant: 'page' | 'field' | 'comment' | 'mobile'; comments?: boolean }>();
+const emit = defineEmits<{ comment: [] }>();
 const ctx = useBlockwell();
 const { editor, active, messages: m } = ctx;
 
@@ -29,7 +29,7 @@ const can = (type: string) => ed().allows(type);
 const isList = computed(() => ['bullet', 'ordered', 'todo'].includes(a.value?.blockKind ?? ''));
 /** Inline code excludes every other mark, so those buttons are off while it is active. */
 const inCode = computed(() => !!a.value?.marks.code || !!a.value?.inCode);
-const mod = typeof navigator !== 'undefined' && /Mac|iP/.test(navigator.platform) ? '⌘' : 'Ctrl+';
+const mod = isMac ? '⌘' : 'Ctrl+';
 const tip = (label: string, key: string) => `${label} (${mod}${key})`;
 const alignIcon = computed(() => {
   void ctx.version.value;
@@ -56,6 +56,12 @@ const roving = () => {
 onMounted(roving);
 watch([() => ctx.version.value, mobileMode], () => nextTick(roving));
 const onKey = (e: KeyboardEvent) => {
+  // Esc in the toolbar goes back to the text, with the selection it had.
+  if (e.key === 'Escape' && !ctx.ui.popover && bar.value?.contains(document.activeElement)) {
+    e.preventDefault();
+    ed().focus();
+    return;
+  }
   if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return;
   const list = buttons();
   const i = list.indexOf(document.activeElement as HTMLButtonElement);
@@ -68,7 +74,7 @@ const onKey = (e: KeyboardEvent) => {
 </script>
 
 <template>
-  <div ref="bar" class="bw-toolbar" :class="`bw-toolbar-${props.variant}`" role="toolbar" :aria-label="m.insert[1]" @keydown="onKey">
+  <div ref="bar" class="bw-toolbar" :class="`bw-toolbar-${props.variant}`" role="toolbar" :aria-label="m.toolbar" @keydown="onKey">
     <template v-if="variant === 'page'">
       <ToolButton icon="undo" :label="tip(m.undo, 'Z')" :disabled="!a?.canUndo" @click="ed().undo()" />
       <ToolButton icon="redo" :label="tip(m.redo, '⇧Z')" :disabled="!a?.canRedo" @click="ed().redo()" />
@@ -102,7 +108,15 @@ const onKey = (e: KeyboardEvent) => {
         <BwIcon :name="alignIcon" /><BwIcon name="expand_more" :size="16" class="bw-muted" />
       </button>
       <span class="bw-sep" />
-      <button type="button" class="bw-tool bw-tool-md bw-tool-insert" aria-haspopup="menu" @mousedown="keepFocus" @click="openFrom('insert', $event)">
+      <button
+        type="button"
+        class="bw-tool bw-tool-md bw-tool-insert"
+        :class="{ 'bw-open': ctx.ui.popover === 'insert' }"
+        aria-haspopup="menu"
+        :aria-expanded="ctx.ui.popover === 'insert'"
+        @mousedown="keepFocus"
+        @click="openFrom('insert', $event)"
+      >
         <BwIcon name="add" />{{ m.insert[0] }} <span class="bw-en">{{ m.insert[1] }}</span>
       </button>
       <span class="bw-spacer" />
@@ -126,7 +140,7 @@ const onKey = (e: KeyboardEvent) => {
       <ToolButton size="sm" icon="format_italic" :label="m.italic" :active="a?.marks.italic" :disabled="inCode" @click="ed().toggleMark('italic')" />
       <ToolButton size="sm" icon="code" :label="m.code" :active="a?.marks.code" @click="ed().toggleMark('code')" />
       <ToolButton size="sm" icon="link" :label="m.link" :active="!!a?.link" :disabled="inCode" @click="openFrom('link', $event)" />
-      <ToolButton size="sm" icon="alternate_email" :label="m.mention" @click="emit('mention')" />
+      <ToolButton v-if="ed().options.mentions" size="sm" icon="alternate_email" :label="m.mention" @click="ed().startMention()" />
       <span class="bw-spacer" />
       <slot name="end" />
     </template>
@@ -139,6 +153,7 @@ const onKey = (e: KeyboardEvent) => {
       <ToolButton size="lg" icon="code" :label="m.code" :active="a?.marks.code" @click="ed().toggleMark('code')" />
       <ToolButton size="lg" icon="format_color_text" :label="m.color" :disabled="inCode" @click="openFrom('color', $event)" />
       <ToolButton size="lg" icon="link" :label="m.link" :active="!!a?.link" :disabled="inCode" @click="openFrom('link', $event)" />
+      <ToolButton v-if="comments" size="lg" icon="add_comment" label="留言 Comment" @click="emit('comment')" />
     </template>
 
     <template v-else-if="mobileMode === 'table'">

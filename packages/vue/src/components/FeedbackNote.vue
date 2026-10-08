@@ -14,21 +14,38 @@ const fb = shallowRef<Feedback | null>(null);
 const showList = ref(false);
 const tick = ref(0);
 let timer = 0;
-let off: (() => void) | null = null;
+const offs: (() => void)[] = [];
 const bump = () => tick.value++;
+const note = ref<HTMLElement | null>(null);
+/** Gone on Escape, a click elsewhere, or when you carry on typing. */
+const onPointer = (e: PointerEvent) => {
+  if (fb.value && !note.value?.contains(e.target as Node)) fb.value = null;
+};
 onMounted(() => {
-  off = ctx.editor.value.on('feedback', (f) => {
-    fb.value = f;
-    showList.value = false;
-    clearTimeout(timer);
-    timer = window.setTimeout(() => (fb.value = null), 9000);
-  });
+  const ed = ctx.editor.value;
+  offs.push(
+    ed.on('feedback', (f) => {
+      fb.value = f;
+      showList.value = false;
+      clearTimeout(timer);
+      timer = window.setTimeout(() => (fb.value = null), 9000);
+      // Show where it happened, e.g. the end of a long paste.
+      requestAnimationFrame(() => ed.scrollCaretIntoView());
+    }),
+    ed.addKeyHandler((e) => {
+      if (!fb.value || ['Shift', 'Control', 'Meta', 'Alt', 'CapsLock'].includes(e.key)) return false;
+      fb.value = null;
+      return e.key === 'Escape';
+    }),
+  );
   window.addEventListener('scroll', bump, true);
+  document.addEventListener('pointerdown', onPointer, true);
 });
 onBeforeUnmount(() => {
-  off?.();
+  offs.forEach((f) => f());
   clearTimeout(timer);
   window.removeEventListener('scroll', bump, true);
+  document.removeEventListener('pointerdown', onPointer, true);
 });
 
 const ICONS = { reject: 'error', adjust: 'content_cut', skip: 'info' } as const;
@@ -61,6 +78,7 @@ const run = () => {
   if (f.code === 'length' && f.block && f.rest) {
     ctx.editor.value.insertOverflow(f.block, f.rest);
     fb.value = null;
+    requestAnimationFrame(() => ctx.editor.value.scrollCaretIntoView());
   } else if (f.code === 'image-src') {
     ctx.pickImage();
     fb.value = null;
@@ -81,7 +99,8 @@ const pos = computed(() => {
   const caret = sel?.type === 'text' && sel.focus.block === f.block ? ed.selectionRect() : null;
   const anchor = caret ?? box;
   const vh = window.visualViewport?.height ?? window.innerHeight;
-  const top = Math.min(Math.max(anchor.bottom + 6, clip.top + 8, 8), Math.min(clip.bottom, vh) - 72);
+  const h = note.value?.offsetHeight ?? 96;
+  const top = Math.min(Math.max(anchor.bottom + 6, clip.top + 8, 8), Math.min(clip.bottom, vh) - h - 8);
   const width = Math.min(Math.max(box.width, 280), 520);
   return { top, left: Math.max(8, Math.min(box.left, window.innerWidth - width - 8)), width };
 });
@@ -90,6 +109,7 @@ const pos = computed(() => {
 <template>
   <div
     v-if="fb && pos"
+    ref="note"
     class="bw-feedback bw-feedback-float"
     :class="`bw-feedback-${fb.level}`"
     :style="{ top: `${pos.top}px`, left: `${pos.left}px`, width: `${pos.width}px` }"

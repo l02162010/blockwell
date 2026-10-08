@@ -13,6 +13,7 @@ export interface Messages {
   link: string;
   color: string;
   insert: [string, string];
+  toolbar: string;
   slashHint: [string, string];
   placeholder: string;
   textColor: [string, string];
@@ -31,6 +32,7 @@ export interface Messages {
   slashGroups: { basic: [string, string]; lists: [string, string]; more: [string, string] };
   slashFooter: [string, string, string];
   slashEmpty: string;
+  insertFilter: string;
   searchLanguage: string;
   languages: Record<string, string>;
   imageFit: string;
@@ -46,6 +48,7 @@ export interface Messages {
   tableRow: { above: [string, string]; below: [string, string]; delete: [string, string] };
   addBlock: string;
   dragBlock: string;
+  blockActions: { menu: string; duplicate: string; moveUp: string; moveDown: string; delete: string };
   send: string;
   reply: string;
   mention: string;
@@ -85,6 +88,7 @@ export interface Messages {
   searchPlaceholder: string;
   swipe: string;
   tableBar: { addRow: string; addCol: string; delete: string; more: string };
+  tableMenus: { row: string; column: string };
   emptyHint: string;
   onboarding: { items: [string, string, string][]; dismiss: string };
   placeholders: Partial<Record<BlockKind, string>>;
@@ -98,12 +102,16 @@ export interface Messages {
   virtualized: (n: number) => string;
   printAll: string;
   presence: { online: (n: number) => [string, string]; you: string; jump: string; follow: [string, string] };
-  comments: { title: [string, string]; reply: string; resolve: string };
-  history: { title: [string, string]; added: string; removed: string; restore: string };
+  comments: { title: [string, string]; reply: string; first: string; resolve: string };
+  history: { title: [string, string]; added: string; removed: string; restore: string; viewing: string };
   close: string;
   tokenNames: Record<string, string>;
   announce: (what: string, on: boolean) => string;
 }
+
+const TOKEN_ZH: Record<string, string> = {
+  default: '預設', gray: '灰色', brown: '棕色', red: '紅色', orange: '橙色', yellow: '黃色', green: '綠色', teal: '藍綠色', cyan: '青色', blue: '藍色', purple: '紫色', pink: '粉紅色',
+};
 
 export const defaultMessages: Messages = {
   blockKinds: {
@@ -127,6 +135,7 @@ export const defaultMessages: Messages = {
   link: '連結 Link',
   color: '顏色 Color',
   insert: ['插入', 'Insert'],
+  toolbar: '格式工具列 Formatting',
   slashHint: ['輸入', '插入區塊'],
   placeholder: '輸入 / 插入區塊 · Type / for commands',
   textColor: ['文字色', 'Text'],
@@ -146,6 +155,7 @@ export const defaultMessages: Messages = {
   slashGroups: { basic: ['基本', 'Basic'], lists: ['清單', 'Lists'], more: ['其他', 'More'] },
   slashFooter: ['↑↓ 選擇', '↵ 插入', 'esc 關閉'],
   slashEmpty: '沒有符合的區塊 · No matches',
+  insertFilter: '搜尋區塊 Search blocks',
   searchLanguage: '搜尋語言 Search',
   languages: {
     plaintext: '純文字 Plain',
@@ -185,7 +195,8 @@ export const defaultMessages: Messages = {
     delete: ['刪除列', 'Delete'],
   },
   addBlock: '新增區塊 Add block',
-  dragBlock: '拖曳移動 Drag to move',
+  dragBlock: '拖曳移動，點一下開啟選單 Drag to move, click for menu',
+  blockActions: { menu: '區塊選單 Block menu', duplicate: '複製 Duplicate', moveUp: '上移 Move up', moveDown: '下移 Move down', delete: '刪除 Delete' },
   send: '傳送',
   reply: '回覆… Reply',
   mention: '提及 Mention',
@@ -246,8 +257,9 @@ export const defaultMessages: Messages = {
     text: ['已貼上純文字', 'Plain text'],
   },
   pasteCounts: (counts, prefix) => {
-    const names: Record<string, string> = { heading: '標題', list: '清單', table: '表格', code: '程式碼', quote: '引言', image: '圖片', divider: '分隔線' };
-    const parts = Object.entries(counts).map(([k, n]) => `${names[k] ?? k} ${n}`);
+    // "1 個標題", not "標題 1", which reads like "Heading 1".
+    const names: Record<string, string> = { heading: '個標題', list: '個清單項目', table: '個表格', code: '段程式碼', quote: '段引言', image: '張圖片', divider: '條分隔線' };
+    const parts = Object.entries(counts).map(([k, n]) => `${n} ${names[k] ?? k}`);
     return parts.length ? `${prefix} ${parts.join('、')}` : '';
   },
   removedKinds: { font: '字型', 'line-height': '行距', mso: 'mso 樣式', comments: '註解', color: '顏色', style: 'style', class: 'class' },
@@ -256,11 +268,12 @@ export const defaultMessages: Messages = {
   search: '搜尋 Search',
   searchPlaceholder: '搜尋文件 · Find in document',
   swipe: '左右滑動',
-  tableBar: { addRow: '加列', addCol: '加欄', delete: '刪除', more: '更多' },
+  tableBar: { addRow: '加列', addCol: '加欄', delete: '刪除列', more: '更多' },
+  tableMenus: { row: '列選單 Row menu', column: '欄選單 Column menu' },
   emptyHint: '開始寫作，或輸入 / 插入區塊',
   onboarding: {
     items: [['/', '插入任何區塊', 'Insert block'], ['# 空格', '標題', 'Heading'], ['- 空格', '項目清單', 'List'], ['[] 空格', '待辦', 'To-do']],
-    dismiss: '不再顯示',
+    dismiss: '隱藏提示 Hide tips',
   },
   placeholders: {
     heading1: '標題 1 · Heading 1',
@@ -281,8 +294,8 @@ export const defaultMessages: Messages = {
   virtualized: (n) => `${n.toLocaleString('en-US')} 個區塊 · 已啟用虛擬化`,
   printAll: '列印時渲染全部',
   presence: { online: (n) => [`${n} 人在線`, `${n} online`], you: '（你）', jump: '前往', follow: ['跟隨游標', 'Follow'] },
-  comments: { title: ['留言', 'Comments'], reply: '回覆… Reply', resolve: '解決 · Resolve' },
-  history: { title: ['版本紀錄', 'History'], added: '新增', removed: '刪除', restore: '還原此版本 · Restore' },
+  comments: { title: ['留言', 'Comments'], reply: '回覆… Reply', first: '寫下留言… Add a comment', resolve: '解決 · Resolve' },
+  history: { title: ['版本紀錄', 'History'], added: '新增', removed: '刪除', restore: '還原此版本 · Restore', viewing: '正在檢視與目前版本的差異 · 唯讀 Comparing with the current version · read-only' },
   close: '關閉 Close',
   tokenNames: {
     default: '預設 default', gray: '灰色 gray', brown: '棕色 brown', red: '紅色 red', orange: '橙色 orange', yellow: '黃色 yellow',
@@ -294,7 +307,9 @@ export const defaultMessages: Messages = {
     if (kinds[what]) return `已轉為${kinds[what]}`;
     const [type, token] = what.split(':');
     const name = names[type!] ?? type;
-    return on ? `已套用${token ? `${token} ` : ''}${name}` : `已移除${name}`;
+    // "已套用紅色文字色", with the colour's Chinese name rather than its token.
+    const colour = token ? (TOKEN_ZH[token] ?? token) : '';
+    return on ? `已套用${colour}${name}` : `已移除${name}`;
   },
 };
 

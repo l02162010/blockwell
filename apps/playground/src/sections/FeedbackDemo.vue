@@ -5,7 +5,8 @@ import { shallowRef } from 'vue';
 import { pasteSamples, textDoc } from '../sample';
 import SectionHead from './SectionHead.vue';
 
-const doc = textDoc('在這裡試試看：');
+const doc = shallowRef(textDoc('在這裡試試看：'));
+const reset = () => (doc.value = textDoc('在這裡試試看：'));
 const editor = shallowRef<Editor | null>(null);
 const atEnd = () => {
   const e = editor.value;
@@ -40,11 +41,12 @@ const badLink = () => {
     <div class="card">
       <div class="demo-buttons">
         <button type="button" @click="badLink">連結 · 開啟連結框</button>
-        <button type="button" @click="tooLong">長度上限 · 插入 10,300 字</button>
+        <button type="button" @click="tooLong">長度上限 · 貼上 10,300 字（段落上限 10,000）</button>
         <button type="button" @click="badImage">圖片來源 · http 圖片</button>
         <button type="button" @click="embed">不支援的內容 · 含嵌入影片</button>
+        <button type="button" class="ghost" @click="reset">重設</button>
       </div>
-      <BlockwellEditor variant="field" :model-value="doc" :upload-image="async () => ({ src: 'https://picsum.photos/640/360' })" @ready="editor = $event" />
+      <BlockwellEditor v-model="doc" class="feedback-field" variant="field" :upload-image="async () => ({ src: 'https://picsum.photos/640/360' })" @ready="editor = $event" />
     </div>
     <div class="levels">
       <div class="bw-feedback bw-feedback-reject"><span class="material-symbols-rounded">error</span><span>拒絕 Reject：不合法的連結、圖片來源</span></div>

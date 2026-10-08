@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { emptyParagraphAfter } from '../helpers.js';
+import { getBlock } from '@blockwell/core';
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { useBlockwell } from '../composables.js';
+import { useBlockwell, visibleRect } from '../composables.js';
 import BwIcon from './BwIcon.vue';
 
 /** "+" and drag handle in the left gutter of the hovered top-level block. */
@@ -33,16 +33,20 @@ const place = (el: HTMLElement) => {
 };
 
 const onMove = (e: MouseEvent) => {
-  if (!ed().isEditable || dragging) return;
+  if (!ed().isEditable || dragging || ctx.ui.popover === 'blockActions') return;
   const root = ed().dom;
   if (!root) return;
   const box = root.getBoundingClientRect();
-  if (e.clientX < box.left - 72 || e.clientX > box.right || e.clientY < box.top || e.clientY > box.bottom) {
+  // Only where the editor is actually visible: its scroll area clips the content.
+  const view = visibleRect(ed()) ?? box;
+  const top = Math.max(box.top, view.top), bottom = Math.min(box.bottom, view.bottom);
+  if (e.clientX < box.left - 72 || e.clientX > box.right || e.clientY < top || e.clientY > bottom) {
     if (!(e.target as Element)?.closest?.('.bw-handles')) hovered.value = null;
     return;
   }
   const el = topBlockAt(e.clientY);
-  if (el) place(el);
+  if (el && el.getBoundingClientRect().top >= view.top - 4) place(el);
+  else hovered.value = null;
 };
 const onScroll = () => (hovered.value = null);
 // Re-place after edits: the hovered block may have moved or changed type.
@@ -65,8 +69,23 @@ const add = () => {
   const id = hovered.value?.id;
   if (!id) return;
   ed().focus();
-  emptyParagraphAfter(ed(), id);
-  ed().startSlash();
+  const b = getBlock(ed().getJSON(), id);
+  // An empty paragraph takes the menu itself; otherwise a new line is added for it.
+  if (b?.type === 'paragraph' && !b.text) {
+    ed().setSelection({ type: 'text', anchor: { block: id, offset: 0 }, focus: { block: id, offset: 0 } });
+    ed().startSlash();
+  } else ed().insertSlashAfter(id);
+};
+
+/** The menu hangs off the block's gutter, which stays put even when the handles hide. */
+const menuAnchor = (id: string) => () => {
+  const r = ed().blockElement(id)?.getBoundingClientRect();
+  const left = ed().dom?.getBoundingClientRect().left ?? r?.left ?? 0;
+  return r ? new DOMRect(left - 30, r.top, 24, 24) : null;
+};
+const openMenu = () => {
+  const id = hovered.value?.id;
+  if (id) ctx.toggle('blockActions', menuAnchor(id), { block: id, source: 'editor' });
 };
 
 const startDrag = (e: PointerEvent) => {
@@ -82,7 +101,22 @@ const startDrag = (e: PointerEvent) => {
   const source = root.children[from] as HTMLElement | undefined;
   const label = (source?.textContent ?? '').trim().slice(0, 60) || source?.getAttribute('data-type') || '';
   const todo = source?.classList.contains('bw-li-todo') ?? false;
+  // Scroll the editor while dragging near its top or bottom edge.
+  const scroller = root.closest('.bw-scroll') as HTMLElement | null;
+  let lastY = startY, autoscroll = 0;
+  const tick = () => {
+    autoscroll = 0;
+    if (!dragging || !moved || !scroller) return;
+    const v = scroller.getBoundingClientRect();
+    const dy = lastY < v.top + 48 ? -12 : lastY > v.bottom - 48 ? 12 : 0;
+    if (dy) {
+      scroller.scrollTop += dy;
+      autoscroll = requestAnimationFrame(tick);
+    }
+  };
   const move = (ev: PointerEvent) => {
+    lastY = ev.clientY;
+    if (!autoscroll) autoscroll = requestAnimationFrame(tick);
     if (Math.abs(ev.clientY - startY) > 4 && !moved) {
       moved = true;
       ed().setBlockClasses('drag', { [id]: 'bw-dragging' });
@@ -107,29 +141,42 @@ const startDrag = (e: PointerEvent) => {
   const up = () => {
     window.removeEventListener('pointermove', move);
     window.removeEventListener('pointerup', up);
+    window.removeEventListener('keydown', cancel, true);
     const d = dragging;
     dragging = null;
     drop.value = null;
     ghost.value = null;
     ed().setBlockClasses('drag', {});
+    cancelAnimationFrame(autoscroll);
     if (!d) return;
     if (!moved) {
-      ed().focus();
-      ed().selectBlockContent(d.id);
+      // A click (no drag) opens the block menu.
+      ctx.toggle('blockActions', menuAnchor(d.id), { block: d.id, source: 'editor' });
       return;
     }
     const target = d.index > from ? d.index - 1 : d.index;
     ed().moveBlock(d.id, target);
+    // Keep working where the block went.
+    ed().revealBlock(d.id, { select: true });
+  };
+  // Escape drops the drag where it started.
+  const cancel = (ev: KeyboardEvent) => {
+    if (ev.key !== 'Escape' || !dragging) return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    dragging = null;
+    up();
   };
   window.addEventListener('pointermove', move);
   window.addEventListener('pointerup', up);
+  window.addEventListener('keydown', cancel, true);
 };
 </script>
 
 <template>
   <div v-if="hovered && ed().isEditable" class="bw-handles" :style="{ top: `${hovered.top}px`, left: `${hovered.left}px` }">
-    <button type="button" class="bw-handle" :aria-label="m.addBlock" :title="m.addBlock" @mousedown.prevent @click="add"><BwIcon name="add" :size="18" /></button>
-    <button type="button" class="bw-handle bw-grab" :aria-label="m.dragBlock" :title="m.dragBlock" @pointerdown="startDrag"><BwIcon name="drag_indicator" :size="18" /></button>
+    <button type="button" class="bw-handle" tabindex="-1" :aria-label="m.addBlock" :title="m.addBlock" @mousedown.prevent @click="add"><BwIcon name="add" :size="18" /></button>
+    <button type="button" class="bw-handle bw-grab" tabindex="-1" :aria-label="m.dragBlock" :title="m.dragBlock" aria-haspopup="menu" :aria-expanded="ctx.ui.popover === 'blockActions'" @pointerdown="startDrag" @keydown.enter.prevent="openMenu" @keydown.space.prevent="openMenu"><BwIcon name="drag_indicator" :size="18" /></button>
   </div>
   <div v-if="drop" class="bw-drop-line" :style="{ top: `${drop.top}px`, left: `${drop.left}px`, width: `${drop.width}px` }" />
   <div v-if="ghost" class="bw-drag-ghost" :style="{ top: `${ghost.y}px`, left: `${ghost.x}px` }" aria-hidden="true">

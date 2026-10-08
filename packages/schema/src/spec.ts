@@ -1,6 +1,6 @@
 import raw from '../../../spec/schema.json';
 
-export type AttrDef =
+type AttrDef =
   | { type: 'enum'; values: readonly (string | number)[]; required?: boolean; default?: unknown }
   | { type: 'int'; min: number; max: number; required?: boolean; default?: unknown }
   | { type: 'bool'; required?: boolean; default?: unknown }
@@ -20,12 +20,12 @@ export interface BlockDef {
   nestedOnly?: boolean;
 }
 
-export interface MarkDef {
+interface MarkDef {
   attrs: AttrDefs;
   excludes?: '*';
 }
 
-export interface EntityDef {
+interface EntityDef {
   attrs: AttrDefs;
 }
 

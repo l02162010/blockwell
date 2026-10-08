@@ -224,11 +224,42 @@
   gap: 2px;
 }
 .bw-toolbar-page {
+  /* Stays at the top while the page scrolls past a tall editor. */
+  position: sticky;
+  top: 0;
+  z-index: 6;
+  background: var(--bw-surface);
   padding: 6px 12px;
   border-bottom: 1px solid var(--bw-line-soft);
-  overflow-x: auto;
-  white-space: nowrap;
-  scrollbar-width: none;
+  /* Wraps instead of hiding buttons behind an invisible horizontal scroll. */
+  flex-wrap: wrap;
+  row-gap: 2px;
+  container-type: inline-size;
+}
+.bw-diff-bar {
+  gap: 8px;
+  min-height: 49px;
+  font-size: 13px;
+  color: var(--bw-muted);
+}
+/* The "type / to insert" hint is the first thing to go when space runs out. */
+@container (max-width: 860px) {
+  .bw-toolbar-page .bw-hint {
+    display: none;
+  }
+}
+/* Then the block-type button drops its English label, so a mid-size toolbar stays on one row. */
+@container (max-width: 700px) {
+  .bw-toolbar-page .bw-tool.bw-tool-kind {
+    width: 96px;
+  }
+  .bw-toolbar-page .bw-sep {
+    margin-inline: 2px;
+  }
+  .bw-toolbar-page .bw-tool.bw-tool-insert .bw-en,
+  .bw-toolbar-page .bw-tool.bw-tool-kind .bw-en {
+    display: none;
+  }
 }
 .bw-tool {
   border: 0;
@@ -293,6 +324,23 @@
   color: var(--bw-faint);
   font-size: 12px;
   opacity: 1;
+}
+/* A fixed width keeps the toolbar from reflowing as the caret moves between block types. */
+.bw-toolbar-page .bw-tool-kind {
+  width: 156px;
+  justify-content: flex-start;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.bw-toolbar-page .bw-tool-kind .bw-en {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.bw-toolbar-page .bw-tool-kind > .bw-icon,
+.bw-toolbar-page .bw-tool-kind > :last-child {
+  margin-left: auto;
+  flex: none;
 }
 .bw-bubble .bw-tool-kind,
 .bw-toolbar-field .bw-tool-kind {
@@ -422,8 +470,27 @@
 .bw-menu-item.bw-hover {
   background: var(--bw-hover-2);
 }
+/* The item the arrow keys are on (see Popover.vue). */
+.bw-popover .bw-kbd-active {
+  box-shadow: inset 0 0 0 2px var(--bw-accent-ring);
+}
+.bw-popover .bw-menu-item.bw-kbd-active {
+  background: var(--bw-accent-tint);
+  box-shadow: none;
+}
 .bw-menu-item.bw-current {
   background: var(--bw-hover-2);
+}
+.bw-menu-item:disabled {
+  opacity: 0.45;
+  cursor: default;
+  background: transparent;
+}
+.bw-danger-item {
+  color: var(--bw-danger);
+}
+.bw-menu-item.bw-danger-item:hover {
+  background: var(--bw-danger-hover);
 }
 .bw-menu-en {
   margin-left: auto;
@@ -640,6 +707,24 @@
   overflow: auto;
   padding: 6px;
   line-height: 1.3;
+}
+.bw-slash-filter {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 4px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--bw-line-soft);
+}
+.bw-slash-filter input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--bw-ink);
+  font: inherit;
+  font-size: 13.5px;
 }
 .bw-slash-group {
   padding: 8px 8px 4px;
@@ -1432,6 +1517,13 @@ button.bw-code-lang:hover {
   border-radius: 8px;
 }
 .bw-image-frame:not([style*='width']) {
+  /* Without a set width an image keeps its own size, so alignment is visible. */
+  width: fit-content;
+}
+.bw-image-frame:not([style*='width']) .bw-image-missing {
+  width: min(480px, 100vw - 64px);
+}
+.bw-image-frame .bw-image-missing {
   width: 100%;
 }
 .bw-image img {
@@ -1647,9 +1739,18 @@ button.bw-code-lang:hover {
   white-space: nowrap;
   border: 0;
 }
-:where(.bw-root, .bw-popover, .bw-bubble) :is(button, input, [tabindex]):focus-visible {
+:where(.bw-root, .bw-popover, .bw-bubble) :is(button, input:not([type='text']):not([type='search']):not([type='url']), [tabindex]):focus-visible {
   outline: 2px solid var(--bw-accent);
   outline-offset: 2px;
+}
+/* Text fields sit in a framed wrapper; the wrapper shows focus instead of a second ring. */
+:is(.bw-search-input, .bw-link-input, .bw-lang-search, .bw-dialog-search, .bw-sheet-search, .bw-alt-field, .bw-reply, .bw-slash-filter) input:focus {
+  outline: none;
+}
+:is(.bw-search-input, .bw-lang-search, .bw-dialog-search, .bw-sheet-search, .bw-alt-field, .bw-reply):focus-within,
+.bw-link-input:not(.bw-bad):focus-within {
+  border-color: var(--bw-accent-ring);
+  box-shadow: 0 0 0 3px var(--bw-accent-tint);
 }
 .bw-body {
   flex: 1;
@@ -1857,9 +1958,12 @@ button.bw-code-lang:hover {
 
 /* Shortcuts dialog */
 .bw-overlay {
-  position: absolute;
+  /* A page-level modal, wherever the editor sits on the page. */
+  position: fixed;
   inset: 0;
-  z-index: 80;
+  z-index: 1000;
+  font-family: var(--bw-font);
+  color: var(--bw-ink);
   background: rgba(20, 20, 15, 0.2);
   display: flex;
   align-items: center;
@@ -1969,9 +2073,11 @@ button.bw-code-lang:hover {
   flex: 1;
   min-width: 0;
 }
-.bw-feedback-text .bw-en {
-  opacity: 0.9;
-  font-size: 1em;
+.bw-feedback-text .bw-en,
+.bw-feedback .bw-en {
+  /* Small text on a tinted background: keep full contrast. */
+  opacity: 1;
+  font-size: max(0.9em, 12px);
 }
 .bw-feedback-list {
   display: block;
@@ -2107,6 +2213,45 @@ button.bw-code-lang:hover {
 .bw-sheet-tile .bw-icon {
   color: var(--bw-ink-2);
 }
+.bw-sheet-tile {
+  word-break: keep-all;
+  text-align: center;
+  line-height: 1.25;
+  padding: 6px 4px;
+}
+.bw-sheet-empty {
+  margin: 8px 0 0;
+  text-align: center;
+  font-size: 13px;
+  color: var(--bw-muted);
+}
+.bw-sheet {
+  max-height: min(70vh, 560px);
+  overflow: auto;
+}
+.bw-root:has(.bw-mobile-inline) .bw-sheet {
+  max-height: 70%;
+}
+/* Popover content shown as a sheet (Popover.vue): full width, bigger targets. */
+.bw-popover-sheet {
+  gap: 4px;
+}
+.bw-popover-sheet :is(.bw-menu, .bw-palette, .bw-link-form, .bw-lang, .bw-turn) {
+  width: auto;
+  min-width: 0;
+  padding: 4px 0 0;
+  font-size: 15px;
+}
+.bw-popover-sheet .bw-menu-item {
+  min-height: 44px;
+}
+.bw-popover-sheet .bw-swatches {
+  grid-template-columns: repeat(auto-fill, minmax(40px, 1fr));
+}
+.bw-popover-sheet .bw-swatch {
+  width: 40px;
+  height: 40px;
+}
 
 /* Empty document */
 .bw-onboarding {
@@ -2122,6 +2267,19 @@ button.bw-code-lang:hover {
   align-items: center;
   gap: 10px;
   font-size: 13.5px;
+  /* Each tip is a button that does what it says. */
+  margin: 0 -8px;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: inherit;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.bw-onboarding-row:hover {
+  background: var(--bw-hover);
 }
 .bw-onboarding-row .bw-en {
   color: var(--bw-muted);
@@ -2147,6 +2305,7 @@ button.bw-code-lang:hover {
 }
 .bw-search-input {
   flex: 1;
+  max-width: 420px;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -2163,23 +2322,27 @@ button.bw-code-lang:hover {
   color: var(--bw-muted);
   white-space: nowrap;
 }
+/* Search uses the accent hue so it never looks like a highlight mark (which uses the palette). */
 ::highlight(bw-search) {
-  background-color: #fef9c3;
+  background-color: oklch(0.9 0.06 255);
   color: inherit;
 }
 ::highlight(bw-search-current) {
-  background-color: #fed7aa;
-  color: inherit;
+  background-color: oklch(0.62 0.15 255);
+  color: #fff;
 }
 ::highlight(bw-comment) {
   background-color: #fef9c3;
 }
-[data-theme='dark'] ::highlight(bw-search),
 [data-theme='dark'] ::highlight(bw-comment) {
   background-color: #423a0f;
 }
+[data-theme='dark'] ::highlight(bw-search) {
+  background-color: oklch(0.38 0.08 255);
+}
 [data-theme='dark'] ::highlight(bw-search-current) {
-  background-color: #7c2d12;
+  background-color: oklch(0.6 0.15 255);
+  color: #fff;
 }
 .bw-statusbar {
   display: flex;
@@ -2251,10 +2414,11 @@ button.bw-code-lang:hover {
   padding: 5px 10px;
 }
 .bw-error-block {
-  border-radius: 6px;
+  /* Tinted padding around the text, then the red ring: the outline never touches the letters. */
+  border-radius: 4px;
   box-shadow:
-    0 0 0 1.5px oklch(0.6 0.17 27),
-    0 0 0 5px oklch(0.96 0.025 27);
+    0 0 0 6px oklch(0.985 0.008 27),
+    0 0 0 7.5px oklch(0.6 0.17 27);
   background: oklch(0.985 0.008 27);
 }
 .bw-save {
@@ -2702,6 +2866,11 @@ button.bw-code-lang:hover {
 }
 .bw-narrow .bw-table td {
   white-space: nowrap;
+  min-width: 72px;
+}
+/* Phones edit tables from the bar above the keyboard, not the desktop + strips. */
+.bw-narrow .bw-table-add {
+  display: none;
 }
 .bw-narrow .bw-table td:first-child {
   position: sticky;
@@ -2715,16 +2884,83 @@ button.bw-code-lang:hover {
 .bw-narrow .bw-table tr:first-child td:first-child {
   background: oklch(0.97 0.004 85);
 }
+[data-theme='dark'] .bw-narrow .bw-table tr:first-child td:first-child {
+  background: var(--bw-hover);
+}
 .bw-narrow .bw-table-scroll {
   position: relative;
 }
-.bw-narrow .bw-table::after {
-  content: 'swipe';
-  font-family: 'Material Symbols Rounded';
-  font-feature-settings: 'liga';
-  position: absolute;
+/* Horizontal scrolling shows itself with a fade on the right edge instead of an icon. */
+.bw-narrow .bw-table-scroll {
+  mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
+}
+
+/* Dark mode: floating surfaces need an edge to stand apart from the page. */
+[data-theme='dark'] :is(.bw-popover, .bw-bubble, .bw-toast, .bw-feedback-float) {
+  box-shadow:
+    0 0 0 1px var(--bw-line-strong),
+    0 14px 36px -10px rgba(0, 0, 0, 0.6);
+}
+
+/* Floating controls are not text: dragging across them must not select their labels. */
+:is(.bw-bubble, .bw-popover, .bw-sheet, .bw-toolbar, .bw-handles, .bw-image-bar) {
+  user-select: none;
+  -webkit-user-select: none;
+}
+:is(.bw-popover, .bw-sheet) :is(input, textarea) {
+  user-select: text;
+  -webkit-user-select: text;
+}
+/* A text selection that cannot be mistaken for the pale blue highlight mark. */
+.bw-editor ::selection {
+  background: color-mix(in oklch, var(--bw-accent) 30%, transparent);
+}
+[data-theme='dark'] .bw-error-block {
+  background: oklch(0.29 0.04 27);
+  box-shadow:
+    0 0 0 6px oklch(0.29 0.04 27),
+    0 0 0 7.5px oklch(0.66 0.16 27);
+}
+
+/* A selected image only looks selected while the editor has focus. */
+.bw-editor:not(:focus) .bw-image.bw-selected .bw-image-frame {
+  outline: none;
+}
+.bw-editor:not(:focus) .bw-image .bw-resize,
+.bw-editor:not(:focus) .bw-image .bw-image-size {
+  display: none;
+}
+.bw-image-missing {
+  max-width: 100%;
+}
+/* Touch: no keyboard-shortcut hints, and comment buttons big enough to tap. */
+@media (pointer: coarse) {
+  .bw-kbd-hint {
+    display: none;
+  }
+  .bw-toolbar-comment .bw-tool {
+    min-width: 40px;
+    height: 40px;
+  }
+}
+
+/* Phones: side panels (comments, history) come up from the bottom instead of squeezing the text. */
+.bw-narrow .bw-panel {
+  position: fixed;
   left: 0;
-  bottom: 2px;
-  font-size: 16px;
-  color: var(--bw-muted);
+  right: 0;
+  bottom: 0;
+  width: auto;
+  max-height: 70vh;
+  z-index: 72;
+  border-radius: 16px 16px 0 0;
+  border-left: 0;
+  box-shadow: 0 -12px 32px -12px rgba(0, 0, 0, 0.25);
+  background: var(--bw-raised);
+}
+.bw-image-full .bw-image-missing {
+  width: 100%;
+}
+.bw-popover .bw-swatch.bw-kbd-active {
+  box-shadow: 0 0 0 2px var(--bw-raised), 0 0 0 4px var(--bw-accent);
 }

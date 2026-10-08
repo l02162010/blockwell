@@ -136,7 +136,7 @@ test('paste sources are recognised', async ({ page }) => {
   await expect(page.locator('.bw-toast')).toContainText('移除 字型、行距');
   await section.getByRole('button', { name: '從 Word 貼上' }).click();
   await expect(page.locator('.bw-toast')).toContainText('從 Word 貼上');
-  await expect(page.locator('.bw-toast')).toContainText('表格 1');
+  await expect(page.locator('.bw-toast')).toContainText('1 個表格');
   await section.getByRole('button', { name: '貼上 Markdown' }).click();
   await expect(page.locator('.bw-toast')).toContainText('偵測到 Markdown');
   await expect(page.locator('.bw-toast')).toContainText('保留原文');
@@ -160,7 +160,9 @@ test('version history shows a diff', async ({ page }) => {
   await expect(page.locator('.bw-history')).toBeVisible();
   await expect(page.locator('.bw-diff .bw-diff-removed')).toContainText('第一版先不處理行動裝置輸入法');
   await expect(page.locator('.bw-diff .bw-diff-added')).toContainText('完整規格見');
-  await expect(page.locator('.frame .bw-toolbar-page')).toHaveCount(0);
+  // The formatting toolbar gives way to a read-only bar of the same height.
+  await expect(page.locator('.frame .bw-toolbar-page:not(.bw-diff-bar)')).toHaveCount(0);
+  await expect(page.locator('.frame .bw-diff-bar')).toContainText('唯讀');
 });
 
 test('comments panel highlights its anchor', async ({ page }) => {

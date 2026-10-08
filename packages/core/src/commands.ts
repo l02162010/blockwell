@@ -77,7 +77,13 @@ export function deleteSelection(tr: Tr): boolean {
   if (sel.type === 'node') return removeNode(tr, sel.block);
   const r = selectionRange(tr.doc, sel);
   if (!r || isCollapsed(sel)) return false;
+  const texts = textBlocks(tr.doc);
+  const first = texts[0], last = texts.at(-1);
+  const whole = r.from.block === first?.id && r.from.offset === 0 && r.to.block === last?.id && r.to.offset === textLength(last);
   deleteRange(tr, r.from, r.to);
+  // Clearing everything leaves a plain paragraph, not an empty copy of the first block's type.
+  const left = tr.doc.blocks.length === 1 ? tr.doc.blocks[0]! : null;
+  if (whole && left && isText(left) && left.type !== 'paragraph') toParagraph(tr, left.id);
   return true;
 }
 
@@ -129,7 +135,7 @@ function clearContainer(tr: Tr, id: string) {
 }
 
 /** Appends `source`'s content to `target` and removes `source`. */
-export function mergeInto(tr: Tr, target: string, source: string) {
+function mergeInto(tr: Tr, target: string, source: string) {
   const t = tr.block(target), s = tr.block(source);
   const c = adaptContent(contentOf(s), t.type);
   tr.insertText({ block: target, offset: textLength(t) }, c.text, c.marks, c.entities);
@@ -238,6 +244,38 @@ export function insertEntity(tr: Tr, type: string, attrs?: Attrs): boolean {
 }
 
 /** Enter. */
+/** Adds an empty paragraph after a top-level block (or after the table/quote holding it) and moves the caret there. */
+export function exitBlock(tr: Tr, id: string): boolean {
+  const top = [tr.block(id), ...ancestors(tr.doc, id)].pop()!;
+  const loc = mustLocate(tr.doc, top.id);
+  const next = (loc.parent ? tr.block(loc.parent).children : tr.doc.blocks)?.[loc.index + 1];
+  if (next?.type === 'paragraph' && !next.text) {
+    tr.setSelection(caret(next.id, 0));
+    return true;
+  }
+  const p = emptyParagraph();
+  tr.insertBlock(loc.parent, loc.index + 1, p);
+  tr.setSelection(caret(p.id, 0));
+  return true;
+}
+
+/**
+ * The Insert menu and slash commands: an empty text block becomes `kind`; a block with text
+ * keeps it and gets a new `kind` block after it (after the table or quote when inside one).
+ */
+export function insertKind(tr: Tr, kind: BlockKind, opts: CommandOptions): boolean {
+  const sel = tr.selection;
+  if (sel?.type !== 'text') return setBlockKind(tr, kind, opts);
+  const b = tr.block(sel.focus.block);
+  if (isText(b) && textLength(b) === 0) return setBlockKind(tr, kind, opts);
+  const top = [b, ...ancestors(tr.doc, b.id)].pop()!;
+  const loc = mustLocate(tr.doc, top.id);
+  const p = emptyParagraph();
+  tr.insertBlock(loc.parent, loc.index + 1, p);
+  tr.setSelection(caret(p.id, 0));
+  return kind === 'paragraph' || setBlockKind(tr, kind, opts);
+}
+
 export function splitBlock(tr: Tr): boolean {
   if (tr.selection?.type === 'node') {
     // Enter on a selected image or divider adds a paragraph after it.
@@ -255,7 +293,14 @@ export function splitBlock(tr: Tr): boolean {
   const loc = mustLocate(tr.doc, b.id);
   const len = textLength(b);
 
-  if (spec.blocks[b.type]?.newlines) return insertText(tr, '\n', null);
+  if (spec.blocks[b.type]?.newlines) {
+    // Enter on an empty last line leaves the code block, like a quote.
+    if (pos.offset === len && len > 0 && (b.text ?? '').endsWith('\n')) {
+      tr.deleteText(b.id, len - 1, len);
+      return exitBlock(tr, b.id);
+    }
+    return insertText(tr, '\n', null);
+  }
 
   if (b.type === 'listItem' && len === 0) {
     const indent = Number(b.attrs?.indent ?? 0);
@@ -337,6 +382,8 @@ export function joinBackward(tr: Tr): boolean {
     toParagraph(tr, b.id);
     return true;
   }
+  // A code block with content is never merged away by Backspace at its start.
+  if (spec.blocks[b.type]?.newlines) return true;
   const siblings = childrenOf(tr.doc, loc.parent);
   const parent = loc.parent ? tr.block(loc.parent) : null;
   if (loc.index === 0) {
@@ -523,6 +570,16 @@ export function setBlockKind(tr: Tr, kind: BlockKind, o: CommandOptions): boolea
   if (!allows(o, target.type)) return false;
   const segs = segments(tr);
   let done = false;
+  // Out of a quote: "paragraph" means "not quoted", and a quote cannot hold a code block.
+  for (const { block } of segs) {
+    const loc = mustLocate(tr.doc, block.id);
+    const parent = loc.parent ? tr.block(loc.parent) : null;
+    if (parent?.type === 'quote' && (kind === 'paragraph' || !parentAllows(tr, block.id, target.type))) {
+      liftFromQuote(tr, block.id);
+      done = true;
+    }
+  }
+  if (done && kind === 'paragraph') return true;
   for (const { block } of segs) {
     const b = tr.block(block.id);
     if (!parentAllows(tr, b.id, target.type)) continue;
@@ -541,6 +598,21 @@ export function setBlockKind(tr: Tr, kind: BlockKind, o: CommandOptions): boolea
     done = true;
   }
   return done;
+}
+
+/** Moves one block out of its quote, splitting the quote around it when needed. */
+function liftFromQuote(tr: Tr, id: string) {
+  const loc = mustLocate(tr.doc, id);
+  const quote = tr.block(loc.parent!);
+  const qloc = mustLocate(tr.doc, quote.id);
+  const kids = quote.children ?? [];
+  const before = kids.slice(0, loc.index), after = kids.slice(loc.index + 1);
+  const b = kids[loc.index]!;
+  tr.removeBlock(quote.id);
+  let at = qloc.index;
+  if (before.length) tr.insertBlock(qloc.parent, at++, { ...quote, children: before });
+  tr.insertBlock(qloc.parent, at++, b);
+  if (after.length) tr.insertBlock(qloc.parent, at, { id: newId(), type: 'quote', children: after });
 }
 
 function toggleQuote(tr: Tr, o: CommandOptions): boolean {
@@ -574,14 +646,26 @@ export function indentList(tr: Tr, delta: 1 | -1): boolean {
   const items = segments(tr).map((s) => tr.block(s.block.id)).filter((b) => b.type === 'listItem');
   if (items.length === 0) return false;
   let changed = false;
+  const done = new Set<string>();
+  const level = (b: Block) => Number(b.attrs?.indent ?? 0);
   for (const item of items) {
+    if (done.has(item.id)) continue;
     const loc = mustLocate(tr.doc, item.id);
-    const prev = childrenOf(tr.doc, loc.parent)[loc.index - 1];
-    const max = prev?.type === 'listItem' ? Number(prev.attrs?.indent ?? 0) + 1 : 0;
-    const cur = Number(item.attrs?.indent ?? 0);
+    const siblings = childrenOf(tr.doc, loc.parent);
+    const prev = siblings[loc.index - 1];
+    const max = prev?.type === 'listItem' ? level(prev) + 1 : 0;
+    const cur = level(item);
     const next = Math.max(0, Math.min(6, Math.min(max, cur + delta)));
     if (next === cur) continue;
-    tr.updateAttrs(item.id, { indent: next || undefined });
+    // The items nested under this one move with it.
+    const group = [item];
+    for (let j = loc.index + 1; j < siblings.length && siblings[j]!.type === 'listItem' && level(siblings[j]!) > cur; j++) group.push(siblings[j]!);
+    for (const g of group) {
+      if (done.has(g.id)) continue;
+      done.add(g.id);
+      const n = Math.max(0, Math.min(6, level(g) + next - cur));
+      tr.updateAttrs(g.id, { indent: n || undefined });
+    }
     changed = true;
   }
   return changed;
@@ -636,7 +720,10 @@ export function insertBlock(tr: Tr, block: Block, o: CommandOptions): boolean {
   }
   if (isAtom(block)) {
     const after = childrenOf(tr.doc, parent)[index + 1];
-    if (!after || !isText(after)) tr.insertBlock(parent, index + 1, emptyParagraph());
+    // A divider continues in a fresh paragraph, not at the start of whatever block follows; an
+    // image (which stays selected) only needs one when nothing editable follows it.
+    const fresh = block.type === 'image' ? !after || !isText(after) : !after || after.type !== 'paragraph' || textLength(after) > 0;
+    if (fresh) tr.insertBlock(parent, index + 1, emptyParagraph());
     tr.setSelection(block.type === 'image' ? { type: 'node', block: block.id } : caret(childrenOf(tr.doc, parent)[index + 1]!.id, 0));
   } else {
     const first = textBlocks({ version: 1, blocks: [block] })[0];
@@ -797,6 +884,27 @@ export function insertFragment(tr: Tr, blocks: Block[], o: CommandOptions): bool
   // Split off the tail of the current block.
   const len = textLength(cur);
   const tail = contentOf(cur, pos.offset, len);
+  // Pasted structure (a heading, a list, code) starts its own block rather than melting into the
+  // line the caret is on; plain paragraphs, or more of the same kind, continue that line.
+  const merge = isText(first) && (textLength(cur) === 0 || first.type === 'paragraph' || first.type === cur.type);
+  if (!merge) {
+    tr.deleteText(cur.id, pos.offset, len);
+    let at = pos.offset === 0 && len > 0 ? loc.index : loc.index + 1;
+    if (pos.offset === 0 && len > 0) tr.insertText({ block: cur.id, offset: 0 }, tail.text, tail.marks, tail.entities);
+    let lastId: string | null = null;
+    for (const b of prepared) {
+      tr.insertBlock(loc.parent, at++, b);
+      lastId = b.id;
+    }
+    if (pos.offset > 0 && pos.offset < len) {
+      const c = adaptContent(tail, cur.type);
+      tr.insertBlock(loc.parent, at, { id: newId(), type: cur.type, attrs: attrsForSplit(cur), text: c.text, marks: c.marks, entities: c.entities });
+    }
+    const lastBlock = lastId ? tr.block(lastId) : null;
+    if (lastBlock && isText(lastBlock)) tr.setSelection(caret(lastBlock.id, textLength(lastBlock)));
+    else if (lastBlock) tr.setSelection({ type: 'node', block: lastBlock.id });
+    return true;
+  }
   tr.deleteText(cur.id, pos.offset, len);
   let rest = prepared;
   let index = loc.index + 1;

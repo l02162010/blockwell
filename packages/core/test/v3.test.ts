@@ -6,7 +6,7 @@ import { diffDocs } from '../src/diff.js';
 import { looksLikeMarkdown, parseMarkdown } from '../src/markdown.js';
 import { convertHtml, parseHtml } from '../src/paste.js';
 import { EditorState } from '../src/state.js';
-import type { Block } from '../src/types.js';
+import type { Block, Doc } from '../src/types.js';
 
 const strip = (blocks: Block[]): unknown =>
   blocks.map(({ id: _id, children, ...rest }) => (children ? { ...rest, children: strip(children) } : rest));
@@ -93,12 +93,62 @@ describe('length limit', () => {
 });
 
 describe('diffDocs', () => {
-  it('marks added, removed and changed blocks in reading order', () => {
+  it('marks added, removed and changed blocks in reading order, removed before added', () => {
     const p = (id: string, text: string): Block => ({ id, type: 'paragraph', text });
     const base = { version: 1 as const, blocks: [p('a', 'one'), p('b', 'two'), p('c', 'three')] };
     const cur = { version: 1 as const, blocks: [p('a', 'one!'), p('n', 'new'), p('c', 'three')] };
     const d = diffDocs(base, cur);
-    expect(d.doc.blocks.map((b) => b.id)).toEqual(['a', 'n', 'b', 'c']);
-    expect(d.changes).toEqual({ a: 'changed', n: 'added', b: 'removed' });
+    expect(d.doc.blocks.map((b) => b.id)).toEqual(['a_was', 'a', 'b', 'n', 'c']);
+    expect(d.changes).toEqual({ a_was: 'removed', a: 'changed', n: 'added', b: 'removed' });
+  });
+});
+
+describe('turning quoted text into something else', () => {
+  const p = (id: string, text: string): Block => ({ id, type: 'paragraph', text });
+  const quoted = (): Doc => ({ version: 1, blocks: [{ id: 'q', type: 'quote', children: [p('a', 'one'), p('b', 'two'), p('c', 'three')] }] });
+  it('paragraph lifts the line out, splitting the quote', () => {
+    const s = new EditorState(quoted(), { type: 'text', anchor: { block: 'b', offset: 0 }, focus: { block: 'b', offset: 0 } });
+    const tr = s.tr();
+    expect(C.setBlockKind(tr, 'paragraph', { allowedBlocks: null })).toBe(true);
+    const r = tr.finish();
+    expect(r.ok).toBe(true);
+    expect(tr.doc.blocks.map((b) => [b.type, b.children?.map((c) => c.id) ?? b.id])).toEqual([
+      ['quote', ['a']],
+      ['paragraph', 'b'],
+      ['quote', ['c']],
+    ]);
+  });
+  it('code lifts the line out before converting', () => {
+    const s = new EditorState(quoted(), { type: 'text', anchor: { block: 'c', offset: 0 }, focus: { block: 'c', offset: 0 } });
+    const tr = s.tr();
+    expect(C.setBlockKind(tr, 'code', { allowedBlocks: null })).toBe(true);
+    expect(tr.finish().ok).toBe(true);
+    expect(tr.doc.blocks.map((b) => b.type)).toEqual(['quote', 'code']);
+  });
+});
+
+describe('convertHtml details', () => {
+  it('drops script, svg and meta with their content and says so', () => {
+    const { doc, report } = convertHtml('<p>a<meta http-equiv="refresh" content="0"><script>x()</script><svg><a>s</a></svg>b</p>');
+    expect(doc.blocks.map((b) => b.text)).toEqual(['ab']);
+    expect(report.removedElements.sort()).toEqual(['meta', 'script', 'svg']);
+    expect(report.droppedAttrs).toEqual([]);
+    expect(report.unknownElements).toBe(0);
+  });
+  it('turns <mark> into the yellow highlight', () => {
+    const { doc } = convertHtml('<p>a <mark>b</mark></p>');
+    expect(doc.blocks[0]!.marks).toEqual([{ type: 'highlight', from: 2, to: 3, attrs: { value: 'yellow' } }]);
+  });
+  it('keeps a code block language from its class', () => {
+    const { doc } = convertHtml('<pre><code class="language-js">let a = 1;</code></pre>');
+    expect(doc.blocks[0]).toMatchObject({ type: 'code', attrs: { language: 'javascript' }, text: 'let a = 1;' });
+  });
+});
+
+describe('palette names in pasted HTML', () => {
+  it('keeps <font color="red"> as the red token', () => {
+    const { doc, report } = convertHtml('<p><font color="red">紅</font>字</p>');
+    expect(doc.blocks[0]!.marks).toEqual([{ type: 'color', from: 0, to: 1, attrs: { value: 'red' } }]);
+    expect(report.issues).toEqual([]);
   });
 });

@@ -247,7 +247,9 @@ describe('input rules', () => {
     ['1. ', { type: 'listItem', attrs: { style: 'ordered' } }],
     ['[] ', { type: 'listItem', attrs: { style: 'todo' } }],
     ['[x] ', { type: 'listItem', attrs: { style: 'todo', checked: true } }],
-    ['```', { type: 'code' }],
+    ['``` ', { type: 'code' }],
+    ['```js ', { type: 'code', attrs: { language: 'javascript' } }],
+    ['7. ', { type: 'listItem', attrs: { style: 'ordered' } }],
   ];
   for (const [typed, expected] of cases) {
     it(`"${typed}"`, () => {
@@ -266,6 +268,34 @@ describe('input rules', () => {
   it('"---" adds a divider', () => {
     const r = run(doc(p('a', '---')), sel(['a', 3]), (tr) => !!runInputRules(tr, o));
     expect(r.doc.blocks.map((b) => b.type)).toEqual(['divider', 'paragraph']);
+  });
+
+  it('list markers switch the kind of a list item', () => {
+    const d = doc({ id: 'a', type: 'listItem', attrs: { style: 'bullet' }, text: '[] ' });
+    const r = run(d, sel(['a', 3]), (tr) => !!runInputRules(tr, o));
+    expect(r.doc.blocks[0]).toMatchObject({ type: 'listItem', attrs: { style: 'todo' }, text: '' });
+  });
+
+  const inline: [string, string, string, number, number][] = [
+    ['a **bold**', 'a bold', 'bold', 2, 6],
+    ['中文*斜體*', '中文斜體', 'italic', 2, 4],
+    ['run `npm i`', 'run npm i', 'code', 4, 9],
+    ['~~old~~', 'old', 'strike', 0, 3],
+    ['__b__', 'b', 'bold', 0, 1],
+  ];
+  for (const [typed, text, mark, from, to] of inline) {
+    it(`"${typed}" applies ${mark}`, () => {
+      const r = run(doc(p('a', typed)), sel(['a', typed.length]), (tr) => !!runInputRules(tr, o));
+      expect(r.ok).toBe(true);
+      expect(r.doc.blocks[0]).toMatchObject({ text, marks: [{ type: mark, from, to }] });
+    });
+  }
+
+  it('leaves snake_case and arithmetic alone', () => {
+    for (const t of ['snake_case_name_', '2*3*', 'a**b**']) {
+      const tr = new EditorState(doc(p('a', t)), sel(['a', t.length])).tr();
+      expect(runInputRules(tr, o)).toBeNull();
+    }
   });
 
   it('only fires at the start of a paragraph', () => {

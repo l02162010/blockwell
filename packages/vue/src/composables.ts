@@ -6,6 +6,7 @@ import {
   onMounted,
   provide,
   reactive,
+  ref,
   shallowRef,
   watch,
   type InjectionKey,
@@ -59,9 +60,9 @@ export function useEditorState(editor: Ref<Editor | null>) {
   return { active, version, refresh };
 }
 
-export type PopoverKind = 'block' | 'align' | 'color' | 'link' | 'codeLanguage' | 'tableColumn' | 'tableRow' | 'imageAlt' | 'insert' | null;
+export type PopoverKind = 'block' | 'align' | 'color' | 'link' | 'codeLanguage' | 'tableColumn' | 'tableRow' | 'imageAlt' | 'insert' | 'blockActions' | null;
 
-export interface UiState {
+interface UiState {
   popover: PopoverKind;
   /** Element or rectangle the popover is attached to. */
   anchor: (() => DOMRect | null) | null;
@@ -77,6 +78,10 @@ export interface BlockwellContext {
   version: ShallowRef<number>;
   ui: UiState;
   messages: Messages;
+  /** Narrow layout: popovers open as bottom sheets. */
+  narrow: Ref<boolean>;
+  /** The editor has focus (selection-bound UI such as the image bar shows only then). */
+  focused: Ref<boolean>;
   open(kind: Exclude<PopoverKind, null>, anchor: (() => DOMRect | null) | null, opts?: { block?: string | null; source?: UiState['source'] }): void;
   close(): void;
   toggle(kind: Exclude<PopoverKind, null>, anchor: (() => DOMRect | null) | null, opts?: { block?: string | null; source?: UiState['source'] }): void;
@@ -95,6 +100,8 @@ export function provideBlockwell(editor: ShallowRef<Editor>, messages: Messages 
     version,
     ui,
     messages,
+    narrow: ref(false),
+    focused: ref(false),
     open(kind, anchor, opts = {}) {
       ui.popover = kind;
       ui.anchor = anchor ? markRaw(anchor) : null;
@@ -134,6 +141,8 @@ export interface FloatingOptions {
   /** Horizontal alignment against the anchor. */
   align?: 'start' | 'center';
   offset?: number;
+  /** The area the element should stay inside (e.g. the editor's scroll area, below its toolbar). */
+  bounds?: () => DOMRect | null;
 }
 
 /**
@@ -148,10 +157,12 @@ export function useFloating(
 ) {
   // Hidden with opacity rather than `visibility`, so inputs inside can take focus before placement.
   const style = reactive({ top: '0px', left: '0px', opacity: '0', pointerEvents: 'none' as 'none' | 'auto' });
+  let side: 'top' | 'bottom' | null = null;
   const place = () => {
     const r = anchor();
     const e = el.value;
     if (!r || !e) {
+      side = null;
       style.opacity = '0';
       style.pointerEvents = 'none';
       return;
@@ -159,9 +170,14 @@ export function useFloating(
     const w = e.offsetWidth, h = e.offsetHeight;
     const gap = opts.offset ?? 8;
     const vw = window.innerWidth, vh = window.visualViewport?.height ?? window.innerHeight;
-    let top = opts.placement === 'top' ? r.top - h - gap : r.bottom + gap;
-    if (opts.placement === 'top' && top < 8) top = r.bottom + gap;
-    else if (opts.placement !== 'top' && top + h > vh - 8 && r.top - h - gap > 8) top = r.top - h - gap;
+    // Pick a side once and keep it, so a menu that shrinks as you filter it stays against its anchor.
+    const minTop = Math.max(8, (opts.bounds?.()?.top ?? 0) + 4);
+    if (!side) {
+      side = opts.placement === 'top' ? 'top' : 'bottom';
+      if (side === 'top' && r.top - h - gap < minTop) side = 'bottom';
+      else if (side === 'bottom' && r.bottom + gap + h > vh - 8 && r.top - h - gap > 8) side = 'top';
+    }
+    const top = side === 'top' ? r.top - h - gap : r.bottom + gap;
     let left = opts.align === 'center' ? r.left + r.width / 2 - w / 2 : r.left - 8;
     left = Math.max(8, Math.min(left, vw - w - 8));
     style.top = `${Math.round(top)}px`;
@@ -174,7 +190,26 @@ export function useFloating(
     cancelAnimationFrame(raf);
     raf = requestAnimationFrame(place);
   };
-  watch([deps, el], schedule, { flush: 'post' });
+  watch(
+    deps,
+    () => {
+      side = null;
+      schedule();
+    },
+    { flush: 'post' },
+  );
+  // A new element (reopened) or a different size (filtered list) needs placing again.
+  let ro: ResizeObserver | null = null;
+  watch(
+    el,
+    (e) => {
+      side = null;
+      ro?.disconnect();
+      if (e && typeof ResizeObserver !== 'undefined') (ro = new ResizeObserver(schedule)).observe(e);
+      schedule();
+    },
+    { flush: 'post' },
+  );
   onMounted(() => {
     window.addEventListener('scroll', schedule, true);
     window.addEventListener('resize', schedule);
@@ -183,11 +218,44 @@ export function useFloating(
   });
   onBeforeUnmount(() => {
     cancelAnimationFrame(raf);
+    ro?.disconnect();
     window.removeEventListener('scroll', schedule, true);
     window.removeEventListener('resize', schedule);
     window.visualViewport?.removeEventListener('resize', schedule);
   });
   return { style, update: schedule };
+}
+
+/**
+ * A counter that changes whenever things drawn over the editor (badges, remote carets) may need
+ * placing again: scrolling, window resizes, and the editor reflowing (a side panel opening).
+ */
+export function useLayoutTick(editor: () => { dom: HTMLElement | null }) {
+  const tick = ref(0);
+  let frame = 0;
+  const bump = () => {
+    cancelAnimationFrame(frame);
+    frame = requestAnimationFrame(() => tick.value++);
+  };
+  let ro: ResizeObserver | null = null;
+  onMounted(() => {
+    window.addEventListener('scroll', bump, true);
+    window.addEventListener('resize', bump);
+    const dom = editor().dom;
+    if (dom && typeof ResizeObserver !== 'undefined') {
+      ro = new ResizeObserver(bump);
+      ro.observe(dom);
+      const scroller = dom.closest('.bw-scroll');
+      if (scroller) ro.observe(scroller);
+    }
+  });
+  onBeforeUnmount(() => {
+    cancelAnimationFrame(frame);
+    ro?.disconnect();
+    window.removeEventListener('scroll', bump, true);
+    window.removeEventListener('resize', bump);
+  });
+  return tick;
 }
 
 /** Closes something when a pointer goes down outside the given elements. */
@@ -207,6 +275,12 @@ export function visibleRect(editor: { dom: HTMLElement | null }): DOMRect | null
   if (!dom) return null;
   return ((dom.closest('.bw-scroll') as HTMLElement | null) ?? dom).getBoundingClientRect();
 }
+
+export const isMac = typeof navigator !== 'undefined' && /Mac|iP(hone|ad|od)/.test(navigator.platform || navigator.userAgent);
+
+/** A shortcut written Mac-style ("⌘ ⇧ X", "⌘↵") as this platform shows it ("Ctrl+Shift+X", "Ctrl+Enter"). */
+export const kbd = (keys: string): string =>
+  isMac ? keys : keys.replace(/⌘ ?/g, 'Ctrl+').replace(/⌥ ?/g, 'Alt+').replace(/⇧ ?/g, 'Shift+').replace(/↵/g, 'Enter');
 
 /** Keeps toolbar buttons from taking focus away from the editor. */
 export const keepFocus = (e: MouseEvent) => e.preventDefault();

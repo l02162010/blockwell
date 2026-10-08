@@ -1,12 +1,34 @@
 <script setup lang="ts">
 import type { Doc, Editor } from '@blockwell/core';
-import { BlockwellEditor, SaveStatus } from '@blockwell/vue';
+import { BlockwellEditor, kbd, SaveStatus } from '@blockwell/vue';
 import { ref, shallowRef } from 'vue';
 import { largeDoc } from '../sample';
 import SectionHead from './SectionHead.vue';
 
 const empty: Doc = { version: 1, blocks: [{ id: 'e1', type: 'paragraph', text: '' }] };
 const title = ref('');
+const emptyEditor = shallowRef<Editor | null>(null);
+/** Enter or ↓ in the title continues in the body, like a document title should. */
+const titleEl = ref<HTMLInputElement | null>(null);
+/** ↑ at the very start of the body goes back up to the title. */
+const onEmptyReady = (e: Editor) => {
+  emptyEditor.value = e;
+  e.addKeyHandler((k) => {
+    const sel = e.selection;
+    const first = e.getJSON().blocks[0];
+    if (k.key !== 'ArrowUp' || sel?.type !== 'text' || !first || sel.focus.block !== first.id || sel.focus.offset !== 0) return false;
+    titleEl.value?.focus();
+    return true;
+  });
+};
+const toBody = (e: KeyboardEvent) => {
+  e.preventDefault();
+  const ed = emptyEditor.value;
+  const first = ed?.getJSON().blocks[0];
+  if (!ed || !first) return;
+  ed.focus();
+  ed.setSelection({ type: 'text', anchor: { block: first.id, offset: 0 }, focus: { block: first.id, offset: 0 } });
+};
 const large = shallowRef<Doc | null>(null);
 const largeEditor = shallowRef<Editor | null>(null);
 const loading = ref(true);
@@ -34,8 +56,8 @@ const placeholders: Doc = {
         <div class="card-title">空白文件 <span>Empty state</span></div>
         <div class="card-desc">第一次開啟時介紹斜線指令與快捷輸入，開始輸入後自動收起。</div>
         <div class="inner empty-doc">
-          <input v-model="title" class="title-input" placeholder="未命名文件 Untitled" aria-label="標題 Title" />
-          <BlockwellEditor :model-value="empty" class="inline-page" :toolbar="false" />
+          <input ref="titleEl" v-model="title" class="title-input" placeholder="未命名文件 Untitled" aria-label="標題 Title" @keydown.enter="toBody" @keydown.down="toBody" />
+          <BlockwellEditor :model-value="empty" class="inline-page" :toolbar="false" @ready="onEmptyReady" />
         </div>
       </div>
       <div class="card">
@@ -45,7 +67,7 @@ const placeholders: Doc = {
           <BlockwellEditor v-if="large" :model-value="large" class="inline-page fixed-height" :toolbar="false" :onboarding="false" @ready="largeEditor = $event" />
           <div v-else class="load-large"><button type="button" class="btn" @click="load">載入 3,412 個區塊</button></div>
         </div>
-        <div v-if="large" class="demo-buttons"><button type="button" @click="find">搜尋 ⌘F</button></div>
+        <div v-if="large" class="demo-buttons"><button type="button" @click="find">搜尋 {{ kbd('⌘F') }}</button></div>
       </div>
       <div class="card">
         <div class="card-title">載入與儲存 <span>Loading & saving</span></div>
@@ -64,7 +86,7 @@ const placeholders: Doc = {
       <div class="card">
         <div class="card-title">空白區塊提示 <span>Block placeholders</span></div>
         <div class="card-desc">只在游標所在的空白區塊顯示，提示該區塊的類型。點進每一行看看。</div>
-        <div class="inner">
+        <div class="inner placeholder-demo">
           <BlockwellEditor :model-value="placeholders" class="inline-page" :toolbar="false" :onboarding="false" />
         </div>
       </div>

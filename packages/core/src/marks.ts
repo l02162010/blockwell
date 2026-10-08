@@ -4,7 +4,7 @@ import type { Attrs, Entity, Mark } from './types.js';
 export const OBJ = '\uFFFC';
 
 const attrsKey = (attrs: Attrs | undefined) => (attrs ? JSON.stringify(Object.entries(attrs).sort()) : '');
-export const sameMark = (a: Mark, b: Mark) => a.type === b.type && attrsKey(a.attrs) === attrsKey(b.attrs);
+const sameMark = (a: Mark, b: Mark) => a.type === b.type && attrsKey(a.attrs) === attrsKey(b.attrs);
 
 function copy(m: Mark, from: number, to: number): Mark {
   return m.attrs ? { type: m.type, from, to, attrs: m.attrs } : { type: m.type, from, to };

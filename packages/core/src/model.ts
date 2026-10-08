@@ -93,7 +93,7 @@ export function textBlocks(doc: Doc): Block[] {
   return allBlocks(doc).filter(isText);
 }
 
-export function comparePos(doc: Doc, a: Pos, b: Pos): number {
+function comparePos(doc: Doc, a: Pos, b: Pos): number {
   if (a.block === b.block) return a.offset - b.offset;
   const order = allBlocks(doc);
   return order.findIndex((x) => x.id === a.block) - order.findIndex((x) => x.id === b.block);

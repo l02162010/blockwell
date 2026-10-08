@@ -4,7 +4,7 @@ import { tokenize } from './highlight.js';
 import { OBJ } from './marks.js';
 import type { Block, Mark } from './types.js';
 
-export interface RenderOptions {
+interface RenderOptions {
   editable: boolean;
   /** Display text for a mention entity. */
   mentionLabel?: (userId: string) => string;
@@ -17,7 +17,7 @@ const MARK_ORDER = ['link', 'code', 'bold', 'italic', 'underline', 'strike', 'co
 
 type Child = Node | string;
 
-export function el<K extends keyof HTMLElementTagNameMap>(
+function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
   attrs: Record<string, string> = {},
   ...children: Child[]
@@ -60,7 +60,7 @@ function wrap(child: Node, mark: Mark, editable: boolean): Node {
 }
 
 /** Fills a text container with the block's runs. Text only ever becomes text nodes. */
-export function renderText(container: HTMLElement, block: Block, o: RenderOptions) {
+function renderText(container: HTMLElement, block: Block, o: RenderOptions) {
   container.replaceChildren();
   const text = block.text ?? '';
   const marks = block.marks ?? [];
@@ -89,10 +89,11 @@ export function renderText(container: HTMLElement, block: Block, o: RenderOption
     for (const m of active) node = wrap(node, m, o.editable);
     container.append(node);
   }
-  // A caret cannot sit in an empty line or after a trailing break without a filler.
+  // A caret cannot sit in an empty line, after a trailing break, or after a trailing mention
+  // (an uneditable inline) without a filler.
   const last = text[text.length - 1];
   const trailingBreak = last === '\n' || (last === OBJ && entities.get(text.length - 1)?.type === 'lineBreak');
-  if (text.length === 0 || trailingBreak) container.append(el('br', { 'data-bw-filler': '' }));
+  if (text.length === 0 || trailingBreak || (o.editable && last === OBJ)) container.append(el('br', { 'data-bw-filler': '' }));
 }
 
 export interface RenderContext extends RenderOptions {

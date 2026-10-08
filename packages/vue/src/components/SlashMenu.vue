@@ -14,8 +14,9 @@ const ctx = useBlockwell();
 const m = ctx.messages;
 const ed = () => ctx.editor.value;
 
+const filter = ref('');
 const items = computed(() => {
-  const q = (props.query ?? '').trim().toLowerCase();
+  const q = (props.mode === 'slash' ? (props.query ?? '') : filter.value).trim().toLowerCase();
   return slashItems(m).filter((it) => {
     if (!ed().allows(it.type)) return false;
     if (it.id === 'image' && !ed().options.uploadImage) return false;
@@ -32,7 +33,7 @@ const index = ref(0);
 watch(items, () => (index.value = 0));
 
 const perform = (it: SlashItem) => (e: Editor) => {
-  if (it.kind) e.setBlockKind(it.kind);
+  if (it.kind) e.insertKind(it.kind);
   else if (it.id === 'divider') e.insertDivider();
   else if (it.id === 'table') e.insertTable(3, 3);
   else if (it.id === 'image') ctx.pickImage();
@@ -56,8 +57,24 @@ useOutside(
 
 const scrollIntoView = () => el.value?.querySelector('.bw-current')?.scrollIntoView({ block: 'nearest' });
 let off: (() => void) | null = null;
+const filterInput = ref<HTMLInputElement | null>(null);
+/** Insert mode types into its own filter field; slash mode reads keys from the editor. */
+const onFilterKey = (e: KeyboardEvent) => {
+  if (e.isComposing) return;
+  if (onKey(e)) {
+    e.preventDefault();
+    if (e.key === 'Escape') ed().focus();
+  }
+};
 onMounted(() => {
-  off = ed().addKeyHandler((e) => {
+  if (props.mode === 'insert') {
+    requestAnimationFrame(() => filterInput.value?.focus());
+    return;
+  }
+  off = ed().addKeyHandler(onKey);
+});
+function onKey(e: KeyboardEvent): boolean {
+  {
     const list = items.value;
     if (e.key === 'ArrowDown' || (e.key === 'Tab' && !e.shiftKey)) {
       index.value = list.length ? (index.value + 1) % list.length : 0;
@@ -81,8 +98,8 @@ onMounted(() => {
       return true;
     }
     return false;
-  });
-});
+  }
+}
 onBeforeUnmount(() => off?.());
 const flatIndex = (it: SlashItem) => items.value.indexOf(it);
 const optionId = (it: SlashItem) => `bw-slash-${it.id}`;
@@ -109,6 +126,10 @@ onBeforeUnmount(() => {
 
 <template>
   <div id="bw-slash-list" ref="el" class="bw-popover bw-slash" :style="style" role="listbox" :aria-label="m.insert.join(' ')">
+    <div v-if="mode === 'insert'" class="bw-slash-filter">
+      <BwIcon name="search" :size="16" class="bw-muted" />
+      <input ref="filterInput" v-model="filter" type="text" :placeholder="m.insertFilter" :aria-label="m.insertFilter" @keydown="onFilterKey" />
+    </div>
     <template v-for="g in groups" :key="g.id">
       <div class="bw-slash-group">{{ g.label[0] }} · {{ g.label[1] }}</div>
       <div

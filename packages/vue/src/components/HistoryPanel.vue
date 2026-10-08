@@ -11,9 +11,23 @@ export interface Version {
 }
 
 /** Version list; selecting one shows its diff in the editor (`diffBase` on BlockwellEditor). */
-const props = defineProps<{ versions: Version[]; selected?: string | null; messages?: Messages }>();
-const emit = defineEmits<{ select: [id: string]; restore: [id: string]; close: [] }>();
-const m = props.messages ?? defaultMessages;
+const props = defineProps<{
+  /** Newest first; mark the live one with `current: true`. */
+  versions: Version[];
+  /** The version being looked at. Pass its document to the editor's `diffBase` to show the changes. */
+  selected?: string | null;
+  /** Replaces any of the UI strings. */
+  messages?: Partial<Messages>;
+}>();
+const emit = defineEmits<{
+  /** A version was clicked. */
+  select: [id: string];
+  /** 還原此版本 was pressed; restore with `editor.replaceContent(doc)` so it can be undone. */
+  restore: [id: string];
+  /** The close button. */
+  close: [];
+}>();
+const m: Messages = { ...defaultMessages, ...props.messages };
 </script>
 
 <template>

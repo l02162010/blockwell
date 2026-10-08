@@ -41,7 +41,24 @@ export interface Token {
   kind: 'keyword' | 'string' | 'number' | 'comment' | 'literal' | 'tag' | null;
 }
 
+/** CSS has no keywords to speak of: colour selectors, properties, values and at-rules instead. */
+function tokenizeCss(text: string): Token[] {
+  const re =
+    /(\/\*[\s\S]*?\*\/)|("(?:[^"\\\n]|\\.)*"?|'(?:[^'\\\n]|\\.)*'?)|(@[\w-]+)|(--?[A-Za-z_][\w-]*|[A-Za-z][\w-]*)(?=\s*:(?![^{]*\{))|([.#]?[A-Za-z_][\w-]*|[.#][\w-]+)(?=[^{};]*\{)|(#[0-9a-fA-F]{3,8}\b|-?\d*\.?\d+(?:px|em|rem|%|vh|vw|s|ms|deg|fr)?\b)/g;
+  const out: Token[] = [];
+  let last = 0;
+  for (let m = re.exec(text); m; m = re.exec(text)) {
+    if (m.index > last) out.push({ text: text.slice(last, m.index), kind: null });
+    const kind: Token['kind'] = m[1] ? 'comment' : m[2] ? 'string' : m[3] || m[4] ? 'keyword' : m[5] ? 'tag' : 'number';
+    out.push({ text: m[0], kind });
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) out.push({ text: text.slice(last), kind: null });
+  return out;
+}
+
 export function tokenize(text: string, language: string): Token[] {
+  if (language === 'css') return tokenizeCss(text);
   const fam = families[language];
   if (!fam) return [{ text, kind: null }];
   const words = new Set(fam.flatMap((f) => KEYWORDS[f]!.split(' ')));

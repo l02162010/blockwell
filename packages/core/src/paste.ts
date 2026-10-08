@@ -1,5 +1,6 @@
 import { isSafeUrl, spec, validate } from '@blockwell/schema';
 import { IMAGE_SCHEMES, LINK_SCHEMES } from './commands.js';
+import { codeLanguage } from './markdown.js';
 import { OBJ, normalizeMarks } from './marks.js';
 import { emptyTable, newId, withFreshIds } from './model.js';
 import type { Attrs, Block, Doc, Entity, Mark } from './types.js';
@@ -12,6 +13,8 @@ export interface PasteReport {
   kept: string[];
   /** Number of elements whose tag is unknown; their text is kept. */
   unknownElements: number;
+  /** Elements removed together with their content (script, iframe, svg…), by tag name. */
+  removedElements: string[];
   /** Attributes that were dropped, by name (`style`, `class`, `on*`). */
   droppedAttrs: string[];
   /** Links or images whose URL failed the check. */
@@ -36,6 +39,7 @@ export interface PasteIssue {
 export const emptyReport = (source: PasteReport['source']): PasteReport => ({
   kept: [],
   unknownElements: 0,
+  removedElements: [],
   droppedAttrs: [],
   unsafeUrls: 0,
   source,
@@ -54,8 +58,8 @@ const BLOCK_TAGS = new Set(['P', 'DIV', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'LI'
 const INLINE_MARK: Record<string, string> = { B: 'bold', STRONG: 'bold', I: 'italic', EM: 'italic', U: 'underline', S: 'strike', DEL: 'strike', STRIKE: 'strike', CODE: 'code', KBD: 'code', SAMP: 'code' };
 const KNOWN = new Set([...BLOCK_TAGS, ...Object.keys(INLINE_MARK), 'A', 'BR', 'SPAN', 'BODY', 'HTML', 'HEAD', 'MARK', 'SUB', 'SUP', 'SMALL', 'FONT', 'LABEL', 'INPUT', 'META', 'COLGROUP', 'COL', 'CAPTION', 'TT', 'Q', 'CITE', 'ABBR', 'TIME', 'WBR']);
 /** Elements whose content is never text. */
-const EMBEDS = new Set(['IFRAME', 'OBJECT', 'EMBED', 'VIDEO', 'AUDIO']);
-const SKIP = new Set(['SCRIPT', 'STYLE', 'TEMPLATE', 'NOSCRIPT', 'IFRAME', 'OBJECT', 'EMBED', 'SVG', 'MATH', 'CANVAS', 'VIDEO', 'AUDIO', 'TITLE', 'HEAD', 'BUTTON', 'SELECT', 'TEXTAREA']);
+const EMBEDS = new Set(['IFRAME', 'OBJECT', 'EMBED', 'VIDEO', 'AUDIO', 'CANVAS']);
+const SKIP = new Set(['SCRIPT', 'STYLE', 'TEMPLATE', 'NOSCRIPT', 'IFRAME', 'OBJECT', 'EMBED', 'SVG', 'MATH', 'CANVAS', 'VIDEO', 'AUDIO', 'TITLE', 'HEAD', 'BUTTON', 'SELECT', 'TEXTAREA', 'META', 'LINK', 'BASE', 'FORM']);
 
 const CONTROL = /[\u0000-\u0008\u000B-\u001F\u007F\uFFFC]/g;
 
@@ -143,6 +147,7 @@ export function parseHtml(html: string, parser: DOMParser = new DOMParser()): Pa
   const dropped = new Set<string>();
   const blocks: Block[] = [];
 
+  const removedTags = new Set<string>();
   const noteAttrs = (el: Element) => {
     for (const a of Array.from(el.attributes)) {
       const n = a.name.toLowerCase();
@@ -162,7 +167,7 @@ export function parseHtml(html: string, parser: DOMParser = new DOMParser()): Pa
   const flush = () => {
     if (line && (!line.empty || lineType === 'code')) {
       if (lineType === 'code') {
-        push({ id: newId(), type: 'code', text: line.text.replace(/\n$/, '') });
+        push({ id: newId(), type: 'code', text: line.text.replace(/\n$/, ''), ...(lineAttrs.language ? { attrs: { language: lineAttrs.language } } : {}) });
       } else push(line.toBlock(lineType, lineAttrs));
     }
     line = null;
@@ -196,17 +201,25 @@ export function parseHtml(html: string, parser: DOMParser = new DOMParser()): Pa
     const el = node as Element;
     const tag = el.tagName.toUpperCase();
     if (SKIP.has(tag)) {
+      // Dropped with everything inside it; only real content (embeds) counts as "skipped".
       if (EMBEDS.has(tag)) {
         report.skipped++;
         issue('embed');
-      } else if (tag !== 'HEAD' && tag !== 'TITLE' && tag !== 'STYLE') report.unknownElements++;
+      }
+      if (tag !== 'HEAD' && tag !== 'TITLE' && tag !== 'STYLE') removedTags.add(tag.toLowerCase());
       return;
     }
     const style = el.getAttribute('style') ?? '';
     // Word list markers ("1." / "·") are separate spans; the list item carries the numbering.
     if (source === 'word' && /mso-list:\s*ignore/i.test(style)) return;
     noteAttrs(el);
-    if (el.getAttribute('color') || /(^|;)\s*color\s*:/i.test(style)) {
+    // A colour that is itself a palette name (<font color="red">) is kept as that token.
+    const named = (el.getAttribute('color') ?? /(?:^|;)\s*color\s*:\s*([a-z]+)\s*(?:;|$)/i.exec(style)?.[1] ?? '').trim().toLowerCase();
+    const token = (spec.palette as readonly string[]).includes(named) ? named : null;
+    if (token) {
+      kept.add('color');
+      active = [...active.filter((m) => m.type !== 'color'), { type: 'color', from: 0, to: 0, attrs: { value: token } }];
+    } else if (el.getAttribute('color') || /(^|;)\s*color\s*:/i.test(style)) {
       // Google Docs colours every link; only an explicit colour elsewhere counts.
       if (source !== 'gdocs' || !el.closest('a')) removed.add('color');
       if (source === 'html') issue('color-dropped');
@@ -308,11 +321,15 @@ export function parseHtml(html: string, parser: DOMParser = new DOMParser()): Pa
         }
         return;
       }
-      case 'PRE':
-        open('code');
+      case 'PRE': {
+        // <pre><code class="language-js"> (highlight.js, Prism, GitHub) keeps its language.
+        const cls = `${el.getAttribute('class') ?? ''} ${el.querySelector('code')?.getAttribute('class') ?? ''}`;
+        const lang = codeLanguage(/(?:language|lang)-([\w#+-]+)/.exec(cls)?.[1] ?? '');
+        open('code', lang ? { language: lang } : {});
         Array.from(el.childNodes).forEach((c) => walk(c, [], true));
         flush();
         return;
+      }
       case 'HR':
         flush();
         blocks.push({ id: newId(), type: 'divider' });
@@ -370,6 +387,11 @@ export function parseHtml(html: string, parser: DOMParser = new DOMParser()): Pa
       }
       case 'INPUT':
         return;
+      case 'MARK':
+        // The browser's highlighter pen: the yellow highlight token.
+        kept.add('highlight');
+        kidsWith([...active.filter((m) => m.type !== 'highlight'), { type: 'highlight', from: 0, to: 0, attrs: { value: 'yellow' } }]);
+        return;
       default: {
         const mark = INLINE_MARK[tag];
         // Google Docs wraps everything in <b style="font-weight:normal">; that is not bold.
@@ -399,6 +421,7 @@ export function parseHtml(html: string, parser: DOMParser = new DOMParser()): Pa
   }
   report.kept = [...kept];
   report.droppedAttrs = [...dropped];
+  report.removedElements = [...removedTags];
   const ORDER = ['font', 'line-height', 'color', 'mso', 'comments'];
   report.removed = [...removed].sort((x, y) => ORDER.indexOf(x) - ORDER.indexOf(y));
   report.issues = [...issues].map(([code, count]) => ({ code, count }));
@@ -408,7 +431,7 @@ export function parseHtml(html: string, parser: DOMParser = new DOMParser()): Pa
 }
 
 /** Blocks per kind, for paste and migration summaries. */
-export function countBlocks(blocks: Block[]): Record<string, number> {
+function countBlocks(blocks: Block[]): Record<string, number> {
   const counts: Record<string, number> = {};
   const add = (k: string) => (counts[k] = (counts[k] ?? 0) + 1);
   const walk = (list: Block[]) => {

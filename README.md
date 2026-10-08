@@ -2,7 +2,7 @@
 
 A block-based rich-text editor whose documents are structured JSON, never HTML.
 
-**[Website and live demo](https://l02162010.github.io/blockwell/)** · [Playground](https://l02162010.github.io/blockwell/playground/)
+**[Website and live demo](https://l02162010.github.io/blockwell/)** · [Docs](https://l02162010.github.io/blockwell/docs/) · [Playground](https://l02162010.github.io/blockwell/playground/)
 
 Blockwell is built for one goal: rich text without the XSS problems of storing and rendering HTML. Every document is checked against a whitelist schema, colors are palette tokens instead of CSS, links are scheme-checked, and renderers build output so that user content can only ever become text.
 
@@ -12,7 +12,7 @@ Blockwell is built for one goal: rich text without the XSS problems of storing a
 
 - **JSON is the only source of truth.** HTML, email, PDF and Excel output are all derived from it.
 - **The schema is the security boundary.** Anything not declared in [`spec/schema.json`](spec/schema.json) is rejected, on the client and on the server.
-- **One spec, four backends.** TypeScript, Go, C# and Rust implement the same [spec](spec/SPEC.md) and must pass the same [conformance suite](conformance/).
+- **A language-neutral spec.** The [spec](spec/SPEC.md) and its [conformance suite](conformance/) are plain JSON. The TypeScript validator passes it today; Go, C# and Rust validators are planned (their folders are skeletons).
 - **Framework-agnostic core**, with a thin Vue 3 adapter first.
 
 ## Document at a glance
@@ -49,6 +49,7 @@ Marks: bold, italic, underline, strike, inline code, link, text color, highlight
 | [`packages/vue`](packages/vue/) | `@blockwell/vue` — `<BlockwellEditor>` and its toolbars, menus, dialogs, status and collaboration UI | Working |
 | [`apps/site`](apps/site/) | Website with a live editor, deployed to GitHub Pages | Working |
 | [`apps/playground`](apps/playground/) | Demo of every v0.3 design screen, plus Playwright tests | Working |
+| [`apps/docs`](apps/docs/) | Documentation site (VitePress): guides, API reference generated from the source, live demos | Working |
 | [`go/`](go/) | Go module | Skeleton |
 | [`dotnet/`](dotnet/) | `Blockwell` NuGet package | Skeleton |
 | [`rust/`](rust/) | `blockwell` crate | Skeleton |
@@ -67,8 +68,10 @@ Marks: bold, italic, underline, strike, inline code, link, text color, highlight
 pnpm install
 pnpm test        # TypeScript conformance and editor-core tests
 pnpm --filter ./apps/playground dev   # playground at http://localhost:5173
-pnpm --filter ./apps/playground e2e   # Playwright browser tests
-./scripts/build-pages.sh              # website + playground into site-dist/
+pnpm --filter ./apps/docs dev         # docs site
+pnpm --filter ./apps/playground e2e   # Playwright: Chromium, Firefox, WebKit, phone emulation, IME
+pnpm api:check                        # every public prop/event/method is documented and tested
+./scripts/build-pages.sh              # website, docs and playground into site-dist/
 cd go && go test ./...
 cd rust && cargo test
 cd dotnet && dotnet test tests/Blockwell.Tests/Blockwell.Tests.csproj

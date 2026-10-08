@@ -18,3 +18,16 @@ describe('tokenize', () => {
     expect(tokenize('if x', 'plaintext')).toEqual([{ text: 'if x', kind: null }]);
   });
 });
+
+describe('css', () => {
+  it('colours selectors, properties and values', () => {
+    const t = tokenize('.dark {\n  --editor-color-red: #F87171;\n  margin: 4px;\n}', 'css').filter((x) => x.kind);
+    expect(t.map((x) => [x.text, x.kind])).toEqual([
+      ['.dark', 'tag'],
+      ['--editor-color-red', 'keyword'],
+      ['#F87171', 'number'],
+      ['margin', 'keyword'],
+      ['4px', 'number'],
+    ]);
+  });
+});

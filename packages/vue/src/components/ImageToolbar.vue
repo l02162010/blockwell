@@ -12,10 +12,13 @@ import ToolButton from './ToolButton.vue';
 const ctx = useBlockwell();
 const m = ctx.messages;
 const ed = () => ctx.editor.value;
+const editingAlt = ref(false);
 const image = computed(() => {
   void ctx.version.value;
   const sel = ed().selection;
   if (sel?.type !== 'node' || !ed().isEditable) return null;
+  // Gone when you click elsewhere on the page; kept while its alt-text field has focus.
+  if (!ctx.focused.value && !editingAlt.value) return null;
   const b = getBlock(ed().getJSON(), sel.block);
   return b?.type === 'image' ? b : null;
 });
@@ -23,7 +26,6 @@ const frameRect = () => {
   const img = image.value && ed().blockElement(image.value.id)?.querySelector('.bw-image-frame');
   return img ? img.getBoundingClientRect() : null;
 };
-const editingAlt = ref(false);
 const el = ref<HTMLElement | null>(null);
 const { style } = useFloating(el, frameRect, () => [ctx.version.value, image.value?.id], { placement: 'top', align: 'center', offset: 12 });
 const altEl = ref<HTMLElement | null>(null);

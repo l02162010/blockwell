@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { convertHtml, type Doc } from '@blockwell/core';
-import { BlockwellEditor } from '@blockwell/vue';
-import { computed, ref, shallowRef, watch } from 'vue';
+import { BlockwellEditor, kbd } from '@blockwell/vue';
+import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
 import palette from '../../../spec/palette.json';
 import JsonView from './JsonView.vue';
 import { heroDoc, nastyHtml, server, usage } from './content';
@@ -9,6 +9,7 @@ import { heroDoc, nastyHtml, server, usage } from './content';
 const REPO = 'https://github.com/l02162010/blockwell';
 const base = import.meta.env.BASE_URL;
 const PLAYGROUND = `${base}playground/`;
+const DOCS = `${base}docs/`;
 
 const theme = ref(document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light');
 watch(theme, (t) => {
@@ -30,12 +31,38 @@ const converted = computed(() => convertHtml(html.value));
 const findings = computed(() => {
   const r = converted.value.report;
   const out: string[] = [];
-  if (r.droppedAttrs.length) out.push(`移除屬性：${r.droppedAttrs.join('、')}`);
+  const colors = r.issues.find((i) => i.code === 'color-dropped');
+  if (r.removedElements.length) out.push(`連同內容移除：${r.removedElements.map((t) => `<${t}>`).join('、')}`);
+  // A dropped colour is reported once, as a colour, not again as a "color" attribute.
+  const attrs = r.droppedAttrs.filter((a) => !(colors && a === 'color'));
+  if (attrs.length) out.push(`移除屬性：${attrs.join('、')}`);
   if (r.unsafeUrls) out.push(`擋下 ${r.unsafeUrls} 個不安全的網址`);
-  if (r.unknownElements) out.push(`${r.unknownElements} 個未知標籤只保留文字`);
-  if (r.skipped) out.push(`略過 ${r.skipped} 個嵌入內容`);
-  for (const i of r.issues) if (i.code === 'color-dropped') out.push(`${i.count} 處非色盤顏色被捨棄`);
+  if (r.unknownElements) out.push(`${r.unknownElements} 個不認得的標籤：去掉標籤，保留文字`);
+  if (colors) out.push(`${colors.count} 處不在色盤的顏色被捨棄`);
   return out;
+});
+
+/** 直接試試看: scroll to the demo and put the caret at the end of the sample. */
+const editorRef = shallowRef<{ editor: { focusEnd(): void } } | null>(null);
+const tryIt = (e: MouseEvent) => {
+  e.preventDefault();
+  document.getElementById('demo')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  tab.value = 'editor';
+  setTimeout(() => editorRef.value?.editor.focusEnd(), 350);
+};
+const menuOpen = ref(false);
+// The phone menu closes on Escape and on any tap outside it.
+const closeMenu = (e: Event) => {
+  if (!menuOpen.value) return;
+  if (e instanceof KeyboardEvent ? e.key === 'Escape' : !(e.target as Element).closest?.('.nav-sheet, .nav-menu-btn')) menuOpen.value = false;
+};
+onMounted(() => {
+  document.addEventListener('keydown', closeMenu);
+  document.addEventListener('pointerdown', closeMenu, true);
+});
+onBeforeUnmount(() => {
+  document.removeEventListener('keydown', closeMenu);
+  document.removeEventListener('pointerdown', closeMenu, true);
 });
 
 const tokens = Object.keys(palette.tokens);
@@ -48,7 +75,7 @@ const features = [
   ['accessibility_new', '無障礙', '工具列 roving tabindex、選單 aria-activedescendant、狀態變化由 live region 朗讀，⌘/ 列出所有快捷鍵。'],
   ['group', '協作介面', '在線成員、遠端游標、留言、版本差異與離線佇列都是元件，資料由你的後端提供。'],
   ['dark_mode', '深色模式與列印', '色盤 token 在淺色、深色、列印三種輸出各有一組經過對比檢查的色值。'],
-  ['translate', '四種後端，一份規格', 'TypeScript、Go、C#、Rust 驗證器共用同一份 conformance 測試，伺服器端也能拒絕不合法的文件。'],
+  ['translate', '規格與語言無關', 'schema 是一份 JSON 規格，附 conformance 測試。TypeScript 驗證器已完成，可在 Node.js 伺服器上拒絕不合法的文件；Go、C#、Rust 仍在規劃中。'],
 ] as const;
 
 </script>
@@ -65,6 +92,7 @@ const features = [
         <a href="#security">安全模型</a>
         <a href="#features">功能</a>
         <a href="#start">開始使用</a>
+        <a :href="DOCS">文件</a>
         <a :href="PLAYGROUND">Playground</a>
       </div>
       <div class="nav-actions">
@@ -76,7 +104,19 @@ const features = [
         >
           <span class="material-symbols-rounded">{{ theme === 'dark' ? 'light_mode' : 'dark_mode' }}</span>
         </button>
-        <a class="btn btn-ghost" :href="REPO" target="_blank" rel="noopener">GitHub</a>
+        <a class="btn btn-ghost nav-github" :href="REPO" target="_blank" rel="noopener">GitHub</a>
+        <button type="button" class="icon-btn nav-menu-btn" aria-label="選單 Menu" :aria-expanded="menuOpen" @click="menuOpen = !menuOpen">
+          <span class="material-symbols-rounded">{{ menuOpen ? 'close' : 'menu' }}</span>
+        </button>
+      </div>
+      <div v-if="menuOpen" class="nav-sheet" @click="menuOpen = false">
+        <a href="#why">為什麼</a>
+        <a href="#security">安全模型</a>
+        <a href="#features">功能</a>
+        <a href="#start">開始使用</a>
+        <a :href="DOCS">文件</a>
+        <a :href="PLAYGROUND">Playground</a>
+        <a :href="REPO" target="_blank" rel="noopener">GitHub</a>
       </div>
     </nav>
 
@@ -88,7 +128,7 @@ const features = [
           Blockwell 是區塊式富文本編輯器。文件是結構化 JSON，schema 白名單就是安全邊界——不需要 sanitizer，XSS 從格式本身就不存在。
         </p>
         <div class="cta">
-          <a class="btn btn-primary" href="#demo">直接試試看</a>
+          <a class="btn btn-primary" href="#demo" @click="tryIt">直接試試看</a>
           <a class="btn" :href="PLAYGROUND">完整 Playground</a>
         </div>
       </div>
@@ -101,7 +141,7 @@ const features = [
       </div>
       <div class="demo-grid" :data-tab="tab">
         <div class="demo-editor">
-          <BlockwellEditor v-model="doc" :debounce="120" :onboarding="false" />
+          <BlockwellEditor ref="editorRef" v-model="doc" :debounce="120" :onboarding="false" />
         </div>
         <aside class="demo-json" aria-label="即時 JSON">
           <div class="json-head">
@@ -113,7 +153,7 @@ const features = [
         </aside>
       </div>
       <p class="demo-hint">
-        試試：選取文字套用顏色、輸入 <kbd>/</kbd> 插入區塊、<kbd>##</kbd> 加空白變標題、<kbd>⌘</kbd><kbd>/</kbd> 看快捷鍵。右邊就是存進資料庫的內容。
+        試試：選取文字套用顏色、輸入 <kbd>/</kbd> 插入區塊、<kbd>##</kbd> 加空白變標題、<kbd>{{ kbd('⌘/') }}</kbd> 看快捷鍵。右邊就是存進資料庫的內容。
       </p>
     </section>
 
@@ -154,7 +194,7 @@ const features = [
           <ul v-if="findings.length" class="findings">
             <li v-for="f in findings" :key="f"><span class="material-symbols-rounded">shield</span>{{ f }}</li>
           </ul>
-          <JsonView :value="converted.doc" compact />
+          <JsonView :value="converted.doc" compact stable-ids />
         </div>
       </div>
     </section>
@@ -195,7 +235,8 @@ const features = [
         </figure>
       </div>
       <div class="cta">
-        <a class="btn btn-primary" :href="REPO" target="_blank" rel="noopener">在 GitHub 上查看</a>
+        <a class="btn btn-primary" :href="`${DOCS}guide/getting-started`">閱讀文件</a>
+        <a class="btn" :href="REPO" target="_blank" rel="noopener">在 GitHub 上查看</a>
         <a class="btn" :href="`${REPO}/blob/main/spec/SPEC.md`" target="_blank" rel="noopener">閱讀規格</a>
       </div>
     </section>
